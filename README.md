@@ -7,5 +7,4 @@ possible to create great layouted and modern applications with a small amount of
 
 At the moment I recommend not publishing applications that use GCL. Please wait for the first official release. 
 
-Requirements:
-All you need is a compiler with C++11 support. 
+A compiler with C++11 support is required
