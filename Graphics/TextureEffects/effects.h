@@ -1,7 +1,8 @@
 /*****************************************************************************
-*                           gcl - effects.h                                 *
+*                           gcl - effects.h                                  *
 *                      Copyright (C) F. Gausling                             *
 *    Version 0.0.0.1 Alpha for more information and the full license visit   *
+*                   http://github.com/Gonger96/GCL                           *
 *****************************************************************************/
 #ifndef EFFECTS_H
 #define EFFECTS_H

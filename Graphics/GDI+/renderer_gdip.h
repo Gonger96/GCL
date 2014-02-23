@@ -1,7 +1,8 @@
 /*****************************************************************************
-*                        gcl - renderer_gdip.h                               *
+*                           gcl - renderer_gdip.h                            *
 *                      Copyright (C) F. Gausling                             *
 *    Version 0.0.0.1 Alpha for more information and the full license visit   *
+*                   http://github.com/Gonger96/GCL                           *
 *****************************************************************************/
 #ifndef RENDERER_GDIP_H
 #define RENDERER_GDIP_H

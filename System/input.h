@@ -2,6 +2,7 @@
 *                           gcl - input.h                                    *
 *                      Copyright (C) F. Gausling                             *
 *    Version 0.0.0.1 Alpha for more information and the full license visit   *
+*                   http://github.com/Gonger96/GCL                           *
 *****************************************************************************/
 #ifndef INPUT_H
 #define INPUT_H

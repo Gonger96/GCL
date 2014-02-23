@@ -1,7 +1,8 @@
 /*****************************************************************************
-*                         gcl - renderer_d2d.h                               *
+*                           gcl - renderer_d2d.h                             *
 *                      Copyright (C) F. Gausling                             *
 *    Version 0.0.0.1 Alpha for more information and the full license visit   *
+*                   http://github.com/Gonger96/GCL                           *
 *****************************************************************************/
 #ifndef RENDERER_D2D_H
 #define RENDERER_D2D_H
