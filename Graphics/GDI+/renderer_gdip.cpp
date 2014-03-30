@@ -6,6 +6,14 @@ namespace gcl { namespace std_renderer {
 gdiplus_renderer::gdiplus_renderer(HWND handle_, callback<void(const size&)>& cb) : tokens(0), context(0), g(0), buffered_context(0), buffered_surface(0), raster_operations(ternary_raster_operations::source_copy), textMode(text_rendering_modes::system_default)
 {
 	handle = handle_;
+	type = graphics_type::handle;
+	create_resources();
+}
+
+gdiplus_renderer::gdiplus_renderer(HDC dc) : tokens(0), context(dc), g(0), buffered_context(0), buffered_surface(0), raster_operations(ternary_raster_operations::source_copy), textMode(text_rendering_modes::system_default)
+{
+	handle = 0;
+	type = graphics_type::dc;
 	create_resources();
 }
 
@@ -15,25 +23,43 @@ void gdiplus_renderer::create_resources()
 		throw invalid_argument("Could not initialize GDI+ renderer");
 }
 
-void gdiplus_renderer::release_resources()
+gdiplus_renderer::~gdiplus_renderer()
 {
+	if(type == graphics_type::dc)
+	{
+		DeleteDC(context);
+		context = 0;
+	}
 	GdiplusShutdown(tokens);
 }
 
 void gdiplus_renderer::begin()
 {
-	context = BeginPaint(handle, &ps);
-	buffered_context = CreateCompatibleDC(context);
-	size sz = get_surface_size();
-	buffered_surface = CreateCompatibleBitmap(context, static_cast<int>(sz.width), static_cast<int>(sz.height));
-	SelectObject(buffered_context, buffered_surface);
-	g = new Graphics(buffered_context);
-	if(!g) throw runtime_error("Unable to create Graphics");
-	g->SetInterpolationMode(InterpolationModeHighQualityBicubic);
+	if(type == graphics_type::handle)
+	{
+		context = BeginPaint(handle, &ps);
+		buffered_context = CreateCompatibleDC(context);
+		size sz = get_surface_size();
+		buffered_surface = CreateCompatibleBitmap(context, static_cast<int>(sz.width), static_cast<int>(sz.height));
+		SelectObject(buffered_context, buffered_surface);
+		g = new Graphics(buffered_context);
+		if(!g) throw runtime_error("Unable to create Graphics");
+	}
+	else if(type == graphics_type::dc)
+	{
+		buffered_context = CreateCompatibleDC(context);
+		RECT rc = {};
+		GetWindowRect(handle, &rc);
+		size sz(static_cast<float>(rc.right - rc.left), static_cast<float>(rc.bottom-rc.top));
+		buffered_surface = CreateCompatibleBitmap(context, static_cast<int>(sz.width), static_cast<int>(sz.height));
+		SelectObject(buffered_context, buffered_surface);
+		g = new Graphics(context);
+		if(!g) throw runtime_error("Unable to create Graphics");
+	}
 	if(antialias)
 		g->SetSmoothingMode(SmoothingModeAntiAlias);
 	else
-		g->SetSmoothingMode(SmoothingModeHighSpeed);
+		g->SetSmoothingMode(SmoothingModeNone);
 	set_text_rendering_mode(textMode);
 }
 
@@ -44,16 +70,32 @@ void gdiplus_renderer::clear(const colour& c)
 
 void gdiplus_renderer::end()
 {
-	size sz = get_surface_size();
-	BitBlt(context, 0, 0, static_cast<int>(sz.width), static_cast<int>(sz.height), buffered_context, 0, 0, static_cast<DWORD>(raster_operations));
-	delete g;
-	g = 0;
-	DeleteObject(buffered_surface);
-	buffered_surface = 0;
-	DeleteDC(buffered_context);
-	buffered_context = 0;
-	EndPaint(handle, &ps);
-	context = 0;
+	if(type == graphics_type::handle)
+	{
+		size sz = get_surface_size();
+		BitBlt(context, 0, 0, static_cast<int>(sz.width), static_cast<int>(sz.height), buffered_context, 0, 0, static_cast<DWORD>(raster_operations));
+		delete g;
+		g = 0;
+		DeleteObject(buffered_surface);
+		buffered_surface = 0;
+		DeleteDC(buffered_context);
+		buffered_context = 0;
+		EndPaint(handle, &ps);
+		context = 0;
+	}
+	else if(type == graphics_type::dc)
+	{
+		RECT rc = {};
+		GetWindowRect(handle, &rc);
+		size sz(static_cast<float>(rc.right - rc.left), static_cast<float>(rc.bottom-rc.top));
+		/*BitBlt(context, 0, 0, static_cast<int>(sz.width), static_cast<int>(sz.height), buffered_context, 0, 0, static_cast<DWORD>(raster_operations));*/
+		delete g;
+		g = 0;
+		DeleteObject(buffered_surface);
+		buffered_surface = 0;
+		DeleteDC(buffered_context);
+		buffered_context = 0;
+	}
 }
 
 void gdiplus_renderer::set_antialias(bool val)
@@ -63,7 +105,7 @@ void gdiplus_renderer::set_antialias(bool val)
 	if(antialias)
 		g->SetSmoothingMode(SmoothingModeAntiAlias);
 	else
-		g->SetSmoothingMode(SmoothingModeHighSpeed);
+		g->SetSmoothingMode(SmoothingModeNone);
 }
 
 Brush* gdiplus_renderer::get_brush(brush* br)
@@ -96,9 +138,9 @@ linear_gradient_brush* gdiplus_renderer::create_linear_gradient_brush(const poin
 	return new  gdiplus_linear_gradient_brush(start, end, gradients, gamma, wrapmode);
 }
 
-pen* gdiplus_renderer::create_pen(brush* b, float width, pen_align align, dash_cap startcap, dash_cap endcap, dash_cap dash_cap_, dash_style dash_style_, float offset)
+pen* gdiplus_renderer::create_pen(brush* b, float width, dash_cap startcap, dash_cap endcap, dash_cap dash_cap_, dash_style dash_style_, float offset)
 {
-	return new gdiplus_pen(b, get_brush(b), width, align, startcap, endcap, dash_cap_, dash_style_, offset);
+	return new gdiplus_pen(b, get_brush(b), width, startcap, endcap, dash_cap_, dash_style_, offset);
 }
 
 texture* gdiplus_renderer::create_texture(const wstring& filename)
@@ -119,6 +161,16 @@ font* gdiplus_renderer::create_font(const wstring& family_name, float size, int 
 geometry* gdiplus_renderer::create_geometry()
 {
 	return new gdiplus_geometry();
+}
+
+graphics* gdiplus_renderer::create_graphics(HWND handle, callback<void(const size&)>& cb)
+{
+	return new gdiplus_renderer(handle, cb);
+}
+
+graphics* gdiplus_renderer::create_graphics(HDC dc)
+{
+	return new gdiplus_renderer(dc);
 }
 
 //********************************************************************************************************************************************************************************************
@@ -388,12 +440,10 @@ gdiplus_geometry::gdiplus_geometry()
 	path = 0;
 }
 
-gdiplus_geometry::~gdiplus_geometry() {}
-
-void gdiplus_geometry::release_resources()
+gdiplus_geometry::~gdiplus_geometry() 
 {
 	if(path)
-	{delete path; path = 0;}
+		delete path;
 }
 
 void gdiplus_geometry::begin_geometry(const point& p)

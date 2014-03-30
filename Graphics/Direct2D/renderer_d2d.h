@@ -38,10 +38,10 @@ public:
 		if(FAILED(factory->CreateTextFormat(family_name.c_str(), NULL, fontWeight, fontStyle, DWRITE_FONT_STRETCH_NORMAL, sz, string_to_unicode_string(locale().name()).c_str(), &format))) throw runtime_error("Unable to create TextFormat");
 	};
 	d2d_font(const d2d_font&)=delete;
+	virtual ~d2d_font() {format->Release();};
 	int get_style() const {return style;};
 	float get_size() const {return sz;};
 	wstring get_family() const {return family;};
-	void release_resources() {format->Release(); format = 0;};
 	bool operator==(font* f) {return (family == f->get_family() && sz == f->get_size() && style == f->get_style());};
 	IDWriteTextFormat* get_native_member() {return format;};
 private:
@@ -64,17 +64,15 @@ public:
 	{
 		if(FAILED(load_texture_from_texture(wic_bmp, d2d_bmp))) throw runtime_error("Unable to copy Bitmap");
 	};
+	virtual ~d2d_texture()
+	{
+		bmp->Release(); 
+		w_bmp->Release();
+	};
 	d2d_texture(const d2d_texture&)=delete;
 	int get_width() const {return static_cast<int>(bmp->GetSize().width);};
 	int get_height() const {return static_cast<int>(bmp->GetSize().height);};
 	ID2D1Bitmap* get_native_member() {return bmp;};
-	void release_resources()
-	{
-		bmp->Release(); 
-		w_bmp->Release(); 
-		bmp = 0; 
-		w_bmp = 0;
-	};
 	texture* clone()
 	{
 		return new d2d_texture(w_bmp, factory, bmp, target);
@@ -189,7 +187,10 @@ class d2d_solid_brush :
 public:
 	d2d_solid_brush(ID2D1RenderTarget* target, D2D1::ColorF& c) : t(target), opacity(1.0f) {if(FAILED(target->CreateSolidColorBrush(c, &br))) throw runtime_error("Unable to create D2D_SolidBrush");};
 	d2d_solid_brush(const d2d_solid_brush&)=delete;
-	void release_resources() {br->Release(); br = 0;};
+	virtual ~d2d_solid_brush()
+	{
+		br->Release();
+	};
 	brush_types get_type() {return brush_types::solid_brush;};
 	colour get_colour() {auto c = br->GetColor(); return colour(static_cast<int>(c.a*255.0f), static_cast<int>(c.r*255), static_cast<int>(c.g*255), static_cast<int>(c.b*255));};
 	void set_colour(const colour& c) {br->SetColor(ColorF(c.r, c.g, c.b, c.a / 255.0f));};
@@ -208,8 +209,11 @@ class d2d_texture_brush :
 public:
 	d2d_texture_brush(texture* img, ID2D1RenderTarget* _target) : image(dynamic_cast<d2d_texture*>(img)), target(_target) {if((_target->CreateBitmapBrush(image->get_native_member(),BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP), &bmp_brush))) throw invalid_argument("Unable to create BitmapBush");};
 	d2d_texture_brush(const d2d_texture_brush&)=delete;
+	virtual ~d2d_texture_brush()
+	{
+		bmp_brush->Release();
+	};
 	brush_types get_type() {return brush_types::texture_brush;};
-	void release_resources() {bmp_brush->Release(); bmp_brush = 0; };
 	void set_transform(const matrix& m) {bmp_brush->SetTransform(Matrix3x2F(m.m11, m.m12, m.m21, m.m22, m.m31, m.m32));};
 	matrix get_transform() const {Matrix3x2F m = Matrix3x2F(); bmp_brush->GetTransform(&m); return matrix(m._11, m._12, m._21, m._22, m._31, m._32);};
 	
@@ -289,8 +293,11 @@ public:
 		delete[] stps;
 	};
 	d2d_linear_gradient_brush(const d2d_linear_gradient_brush&)=delete;
+	virtual ~d2d_linear_gradient_brush()
+	{
+		br->Release();
+	};
 	brush_types get_type() {return brush_types::linear_gradient_brush;};
-	void release_resources() {br->Release(); br = 0;};
 	void set_transform(const matrix& m) {br->SetTransform(Matrix3x2F(m.m11, m.m12, m.m21, m.m22, m.m31, m.m32));};
 	matrix get_transform() const {Matrix3x2F m = Matrix3x2F(); br->GetTransform(&m); return matrix(m._11, m._12, m._21, m._22, m._31, m._32);};
 	float get_opacity() const {return br->GetOpacity();};
@@ -335,11 +342,11 @@ class d2d_geometry :
 public:
 	d2d_geometry(ID2D1Factory* fct);
 	d2d_geometry(const d2d_geometry&)=delete;
+	virtual ~d2d_geometry();
 	void begin_geometry(const point& p);
 	void end_geometry();
 	bool contains(const point& p); 
 	bool outline_contains(const point& p, pen* pe);
-	void release_resources();
 
 	void add_bezier(const point& p1, const point& p2, const point& p3);
 	void add_beziers(const point* ps, int count);
@@ -365,20 +372,21 @@ class d2d_pen :
 	public pen
 {
 public:
-	d2d_pen(brush* org, ID2D1Brush* br, ID2D1Factory* f, float w, pen_align algn = pen_align::center, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap caps = dash_cap::flat, dash_style dstyle = dash_style::solid, float offset = 0) : org_br(org), width(w), align(algn), start_cap(startcap), end_cap(endcap), cap(caps), style(dstyle), dash_offset(offset), brush_(br), factory(f) {recreate();};
-	~d2d_pen() {};
+	d2d_pen(brush* org, ID2D1Brush* br, ID2D1Factory* f, float w, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap caps = dash_cap::flat, dash_style dstyle = dash_style::solid, float offset = 0) : org_br(org), width(w), start_cap(startcap), end_cap(endcap), cap(caps), style(dstyle), dash_offset(offset), brush_(br), factory(f) {recreate();};
+	virtual ~d2d_pen() 
+	{
+		stroke_style->Release();
+	};
 	ID2D1Brush* get_native_member() {return brush_;};
 	ID2D1StrokeStyle* get_stroke_style() {return stroke_style;};
-	void release_resources() {stroke_style->Release(); stroke_style = 0;};
 
 	brush* get_brush() const {return org_br;};
 
 	dash_cap get_start_cap() const {return start_cap;};
+	void update() {};
 	void set_start_cap(const dash_cap& p) {start_cap = p; recreate();};
 	dash_cap get_end_cap() const {return end_cap;};
 	void set_end_cap(const dash_cap& p) {end_cap = p; recreate();};
-	pen_align get_align() const {return align;};
-	void set_align(const pen_align& a) {align = a; recreate();};
 	dash_cap get_dash_cap() const {return cap;};
 	void set_dash_cap(const dash_cap& c) {cap = c; recreate();};
 	dash_style get_dash_style() const {return style;};
@@ -389,9 +397,8 @@ public:
 	void set_width(float f) {width = f; recreate();};
 private:
 	void recreate() 
-	{if(FAILED(factory->CreateStrokeStyle(StrokeStyleProperties(static_cast<D2D1_CAP_STYLE>(start_cap), static_cast<D2D1_CAP_STYLE>(end_cap), static_cast<D2D1_CAP_STYLE>(cap), align == pen_align::center ? D2D1_LINE_JOIN_MITER : D2D1_LINE_JOIN_BEVEL, 10.0f,
+	{if(FAILED(factory->CreateStrokeStyle(StrokeStyleProperties(static_cast<D2D1_CAP_STYLE>(start_cap), static_cast<D2D1_CAP_STYLE>(end_cap), static_cast<D2D1_CAP_STYLE>(cap), D2D1_LINE_JOIN_MITER, 10.f,
 	static_cast<D2D1_DASH_STYLE>(style), dash_offset), 0, 0, &stroke_style))) throw runtime_error("Unable to create Strokestyle");};
-	pen_align align;
 	dash_cap start_cap, end_cap, cap;
 	dash_style style;
 	float width, dash_offset;
@@ -408,6 +415,7 @@ class direct2d_renderer :
 public:
 	direct2d_renderer(HWND hWnd, callback<void(const size&)>& target_resize);
 	direct2d_renderer(const direct2d_renderer&)=delete;
+	virtual ~direct2d_renderer();
 	HDC get_dc() const {return dc;};
 	void begin();
 	void clear(const colour& c);
@@ -438,7 +446,7 @@ public:
 	solid_brush* create_solid_brush(const colour& c);
 	texture_brush* create_texture_brush(texture* image);
 	linear_gradient_brush* create_linear_gradient_brush(const point& start, const point& end, gradient_stop& gradients, bool gamma = false, const wrap_modes& wrapmode = wrap_modes::wrap);
-	pen* create_pen(brush* b, float width = 1.0f, pen_align align = pen_align::center, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap dash_cap = dash_cap::flat, dash_style dash_style = dash_style::solid, float offset = 0.0f);
+	pen* create_pen(brush* b, float width = 1.0f, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap dash_cap = dash_cap::flat, dash_style dash_style = dash_style::solid, float offset = 0.0f);
 	texture* create_texture(const wstring& filename);
 	texture* create_texture(int id, LPWSTR type, HINSTANCE inst);
 	font* create_font(const wstring& family_name, float size, int fstyle);
@@ -465,7 +473,7 @@ private:
 	D2D1_RECT_F get_rect(const rect& rc);
 	D2D1_POINT_2F get_point(const point& p);
 	Matrix3x2F get_matrix(const matrix& m);
-	void release_resources();
+	graphics_type type;
 
 	ID2D1Factory* factory;
 	ID2D1HwndRenderTarget* render_target;

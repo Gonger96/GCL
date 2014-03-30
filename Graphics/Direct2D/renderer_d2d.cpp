@@ -6,12 +6,13 @@ namespace gcl { namespace std_renderer {
 void direct2d_renderer::target_resizes(const size& sz)
 {
 	if(!render_target) return;
-		render_target->Resize(SizeU(static_cast<int>(sz.width), static_cast<int>(sz.height)));
+	if(type == graphics_type::handle) dynamic_cast<ID2D1HwndRenderTarget*>(render_target)->Resize(SizeU(static_cast<int>(sz.width), static_cast<int>(sz.height)));
 }
 
 direct2d_renderer::direct2d_renderer(HWND handle_, callback<void(const size&)>& cb) : render_target(0), factory(0), imgfactory(0), write_factory(0), dc(0)
 {
 	handle = handle_;
+	type = graphics_type::handle;
 	cb += make_func_ptr(this, &direct2d_renderer::target_resizes);
 	create_resources();
 }
@@ -26,16 +27,12 @@ void direct2d_renderer::create_resources()
 	if(FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&write_factory)))) throw runtime_error("Unable to create DirectWriteFactory");
 }
 
-void direct2d_renderer::release_resources() 
+direct2d_renderer::~direct2d_renderer()
 {
 	write_factory->Release();
-	write_factory = 0;
 	imgfactory->Release();
-	imgfactory = 0;
 	render_target->Release();
-	render_target = 0;
 	factory->Release();
-	factory = 0;
 }
 
 void direct2d_renderer::begin()
@@ -158,7 +155,7 @@ void direct2d_renderer::draw_string(const wstring& str, const point& origin, fon
 {
 	float fmax = (numeric_limits<float>::max)();
 	IDWriteTextFormat* format_ = dynamic_cast<d2d_font*>(fn)->get_native_member();
-	if((int)format == (int)string_format::direction_left_to_right)
+	if(format == string_format::direction_left_to_right)
 	{
 		if(FAILED(format_->SetReadingDirection(DWRITE_READING_DIRECTION_LEFT_TO_RIGHT))) throw runtime_error("Unable to set ReadingDirection");
 	}
@@ -175,9 +172,13 @@ void direct2d_renderer::draw_string(const wstring& str, const rect& cliprc, font
 {
 	IDWriteTextFormat* format_ = dynamic_cast<d2d_font*>(fn)->get_native_member();
 	if(format == string_format::direction_left_to_right)
+	{
 		if(FAILED(format_->SetReadingDirection(DWRITE_READING_DIRECTION_LEFT_TO_RIGHT))) throw runtime_error("Unable to set ReadingDirection");
+	}
 	else
+	{
 		if(FAILED(format_->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT))) throw runtime_error("Unable to set ReadingDirection");
+	}
 	DWRITE_TEXT_ALIGNMENT alignh;
 	DWRITE_PARAGRAPH_ALIGNMENT alignv;
 	switch(clipping_h)
@@ -269,9 +270,9 @@ linear_gradient_brush* direct2d_renderer::create_linear_gradient_brush(const poi
 	return new d2d_linear_gradient_brush(start, end, gradients, render_target, gamma, wrapmode);
 }
 
-pen* direct2d_renderer::create_pen(brush* b, float width, pen_align align, dash_cap startcap, dash_cap endcap, dash_cap dash_cap, dash_style dashstyle, float offset)
+pen* direct2d_renderer::create_pen(brush* b, float width, dash_cap startcap, dash_cap endcap, dash_cap dash_cap, dash_style dashstyle, float offset)
 {
-	return new d2d_pen(b, get_brush(b), factory, width, align, startcap, endcap, dash_cap, dashstyle, offset);
+	return new d2d_pen(b, get_brush(b), factory, width, startcap, endcap, dash_cap, dashstyle, offset);
 }
 
 texture* direct2d_renderer::create_texture(const wstring& filename)
@@ -414,14 +415,11 @@ bool d2d_geometry::outline_contains(const point& p, pen* pe)
 	return (b != 0);
 }
 
-void d2d_geometry::release_resources()
+d2d_geometry::~d2d_geometry()
 {
 	if(geo)geo->Release();
-	geo = 0;
 	if(geo_sink)geo_sink->Release();
-	geo_sink = 0;
 	if(geo_trans)geo_trans->Release();
-	geo_trans = 0;
 }
 
 void d2d_geometry::transform(const matrix& m1)

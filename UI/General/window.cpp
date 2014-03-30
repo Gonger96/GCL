@@ -6,22 +6,36 @@ namespace gcl { namespace ui {
 window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location)
 {
 	set_min_size(size(0,0));
+	has_resources = false;
 	set_max_size(size::max_size());
 	set_enabled(true);
 	bottom_s = 0;
 	top_s = 0;
 	topmost_s = 0;
+	shown = false;
+	focused_surf = 0;
 }
 
 void window::create_resources(graphics* g)
 {
+	has_resources = true;
 	_graphics->set_antialias(true);
 	_graphics->set_text_rendering_mode(text_rendering_modes::antialias);
 };
 
-void window::release_resources()
+window::~window()
 {
-	_graphics->release_resources();
+	has_resources = false;
+	if(handle)
+	{
+		SendMessage(handle, WM_CLOSE, 0, 0);
+		handle = 0;
+	}
+	for(auto& surf : surfaces)
+	{
+		surface_removed(surf);
+	}
+	surfaces.clear();
 }
 
 void window::render(graphics* g)
@@ -44,6 +58,11 @@ void window::redraw(const rect& s)
 	rc.left = static_cast<int>(s.position.x+1);
 	rc.top = static_cast<int>(s.position.y+1);
 	InvalidateRect(handle, &rc, FALSE);
+}
+
+void window::close()
+{
+	SendMessage(handle, WM_CLOSE, 0, 0);
 }
 
 void window::set_enabled(bool b)
@@ -201,6 +220,21 @@ void window::set_colour(const colour& c)
 	render(_graphics);
 }
 
+void window::set_focus(bool b)
+{
+	if(!change_if_diff(focus, b)) return;
+	SetFocus(b ? handle : GetDesktopWindow());
+	focus_changed(b);
+}
+
+void window::set_focused_surface(dynamic_drawsurface* surf)
+{
+	if(focused_surf == surf) return;
+	if(focused_surf)focused_surf->set_focus(false);
+	if(surf)surf->set_focus(true);
+	focused_surf = surf;
+}
+
 void window::set_borderstyle(const window_borderstyles style)
 {
 	borderstyle = style;
@@ -282,6 +316,14 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	try {
 	switch (msg)
 	{
+	case WM_SETFOCUS:
+		focus = true;
+		focus_changed(true);
+		break;
+	case WM_KILLFOCUS:
+		focus = false;
+		focus_changed(false);
+		break;
 	case WM_ERASEBKGND:
 	/*	render(_graphics);*/
 		return TRUE;
@@ -325,16 +367,16 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			else if(msg == WM_MBUTTONUP) 
 				btns = mouse_buttons::middle;
 			bool risen = false;
-			is_mouse_dwn = false;
 			for(auto& surf : surfaces)
 			{
-				if((surf->contains(p) || surf->get_mouse_down()) && surf->is_available())
+				if((surf->contains(p) || surf->get_mouse_down()) && surf->is_available() && is_mouse_dwn)
 				{
 					surf->on_mouse_up(btns, static_cast<int>(wParam), p);
 					risen = true;
 				}
 			}
 			if(!risen) mouse_up(btns, static_cast<int>(wParam), p);
+			is_mouse_dwn = false;
 			InvalidateRect(hWnd, 0, FALSE);
 			break;
 		}
@@ -379,7 +421,7 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				{
 					mouse_enter(static_cast<int>(wParam), p);
 					if(surf->get_mouse_down() && !(((wParam & mouse_modifiers::l_button) == mouse_modifiers::l_button) || ((wParam & mouse_modifiers::r_button) == mouse_modifiers::r_button) || ((wParam & mouse_modifiers::m_button) == mouse_modifiers::m_button)) )
-						surf->on_mouse_up(mouse_buttons::left, static_cast<int>(wParam), p);
+						surf->crt_up();
 					InvalidateRect(hWnd, 0, FALSE);
 				}
 			}
@@ -398,13 +440,32 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	case WM_MOUSELEAVE:
 		is_mouse_over = false;
 		is_mouse_dwn = false;
+		for(auto& surf : surfaces) surf->on_mouse_leave(0, point(-1.f, -1.f));;
+		InvalidateRect(hWnd, 0, TRUE);
 		mouse_leave(static_cast<int>(wParam), point((float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam)));
 		break;
-	case WM_SIZE: // wm_exitmovesize
-		size_changed(get_size());
-		layout();
-		for(auto& surf : surfaces) surf->size_changed(surf->get_size());
-		break;
+	case WM_SIZE:
+		{
+			switch(wParam)
+			{
+			case SIZE_MAXIMIZED:
+				state = window_states::maximized;
+				break;
+			case SIZE_MINIMIZED:
+				state = window_states::minimized;
+				break;
+			case SIZE_RESTORED:
+				state = window_states::normal;
+			}
+			size_changed(get_size());
+			layout();
+			for(auto& surf : surfaces) 
+			{
+				surf->size_changed(surf->get_size());
+			}
+			InvalidateRect(hWnd, 0, TRUE);
+			break;
+		}
 	case WM_GETMINMAXINFO:
 		{
 			MINMAXINFO* p = reinterpret_cast<MINMAXINFO*>(lParam);
@@ -416,12 +477,12 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		}
 	case WM_CLOSE:
 		DestroyWindow(hWnd);
-		handle_destroyed(hWnd);
 		break;
 	//case WM_DISPLAYCHANGE:
 		
 	case WM_DESTROY:
-		release_resources();
+		handle_destroyed(hWnd);
+		shown = false;
 		PostQuitMessage(0);
 		break;
 	default:
@@ -429,14 +490,15 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	}}
 	catch(const exception&)
 	{
-		release_resources();
 		throw;
 	}
 	return 0;
 }
 
-int window::show_dialog()
+int window::show_dialog(HWND hWndOwner)
 {
+	if(shown) throw invalid_argument("Window already exists");
+	if(_graphics && !has_resources) create_resources(_graphics);
 	time_t tm;
 	time(&tm);
 	wstring classname = L"GCL_hWndWrapp&" + to_wstring(tm);
@@ -502,7 +564,7 @@ int window::show_dialog()
 	}
 	if(!RegisterClassEx(&wcex))
 		throw runtime_error("Registering windowclass failed. (" + to_string(GetLastError()) + ")");
-	HWND hWnd = CreateWindowEx(exstyle, classname.c_str(), title.c_str(), styles, static_cast<int>(location.x), static_cast<int>(location.y), static_cast<int>(sizef.width), static_cast<int>(sizef.height), 0, 0, GetModuleHandle(NULL), this); 
+	HWND hWnd = CreateWindowEx(exstyle, classname.c_str(), title.c_str(), styles, static_cast<int>(location.x), static_cast<int>(location.y), static_cast<int>(sizef.width), static_cast<int>(sizef.height), hWndOwner, 0, GetModuleHandle(NULL), this); 
 	if(!hWnd) throw runtime_error("Creating window failed. (" + to_string(GetLastError()) + ")");
 	handle = hWnd;
 	handle_created(hWnd);
@@ -519,6 +581,7 @@ int window::show_dialog()
 		ShowWindow(handle, SW_SHOWMAXIMIZED);
 		break;
 	};
+	shown = true;
 	UpdateWindow(hWnd);
 	MSG msg;
 	while(GetMessage(&msg, 0, 0, 0) > 0)

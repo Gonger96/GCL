@@ -32,11 +32,15 @@ public:
 		if(!f->IsAvailable()) throw invalid_argument("Font is not available");
 	}
 	gdiplus_font(const gdiplus_font&)=delete;
+	virtual ~gdiplus_font()
+	{
+		delete f;
+		delete frm;
+	};
 	bool operator==(font* f) {return (family == f->get_family() && sz == f->get_size() && style == f->get_style());};
 	int get_style() const {return style;};
 	float get_size() const {return sz;};
 	wstring get_family() const {return family;};
-	void release_resources() {delete f; f= 0; delete frm; frm = 0;};
 	Font* get_native_font() {return f;};
 	StringFormat* get_native_format() {return frm;};
 private:
@@ -61,10 +65,13 @@ public:
 			throw runtime_error("Unable to copy Bitmap");
 	};
 	gdiplus_texture(const gdiplus_texture&)=delete;
+	virtual ~gdiplus_texture()
+	{
+		delete img;
+	};
 	int get_width() const {return img->GetWidth();};
 	int get_height() const {return img->GetHeight();};
 	Image* get_native_member() {return img;};
-	void release_resources() {delete img; img = 0;};
 	texture* clone()
 	{
 		return new gdiplus_texture(img);
@@ -120,7 +127,10 @@ class gdiplus_solid_brush :
 public:
 	explicit gdiplus_solid_brush(Color& c) : opacity(1.0f) {br = new SolidBrush(c); c_ = colour(c.GetR(), c.GetG(), c.GetB(), c.GetA());};
 	gdiplus_solid_brush(const gdiplus_solid_brush&)=delete;
-	void release_resources() {delete br; br = 0;};
+	virtual ~gdiplus_solid_brush()
+	{
+		delete br;
+	};
 	brush_types get_type() {return brush_types::solid_brush;};
 	colour get_colour() {return c_.opacity(opacity);};
 	void set_colour(const colour& c) {c_ = c; if(GDI_FAIL(br->SetColor(Color(c.opacity(opacity).get_value())))) throw runtime_error("Unable to set colour of GDI+ SolidBrush");};
@@ -139,8 +149,11 @@ class gdiplus_texture_brush :
 public:
 	gdiplus_texture_brush(texture* image) : img(dynamic_cast<gdiplus_texture*>(image)), mode(wrap_modes::wrap) {br = new TextureBrush(img->get_native_member(), WrapModeTile);};
 	gdiplus_texture_brush(const gdiplus_texture_brush&)=delete;
+	virtual ~gdiplus_texture_brush()
+	{
+		delete br;
+	};
 	brush_types get_type() {return brush_types::texture_brush;};
-	void release_resources() {delete br; br = 0;};
 	void set_transform(const matrix& m) {if(GDI_FAIL(br->SetTransform(&Matrix(m.m11, m.m12, m.m21, m.m22, m.m31, m.m32)))) throw runtime_error("Unable to set matrix");};
 	matrix get_transform() const 
 	{
@@ -182,8 +195,13 @@ public:
 		create_br(start, end, pos_f, colr_f, gradients.get_count(), gamma, wrapmode);
 	};
 	gdiplus_linear_gradient_brush(const gdiplus_linear_gradient_brush&)=delete;
+	virtual ~gdiplus_linear_gradient_brush()
+	{
+		delete br;
+		delete[] pos_f;
+		delete[] colr_f;
+	};
 	brush_types get_type() {return brush_types::linear_gradient_brush;};
-	void release_resources() {delete br; delete[] pos_f; delete[] colr_f; br = 0; pos_f = 0; colr_f = 0;};
 	void set_transform(const matrix& m_) 
 	{
 		m = m_;
@@ -262,10 +280,10 @@ class gdiplus_pen :
 	public pen
 {
 public:
-	gdiplus_pen(brush* org, Brush* br, float w, pen_align algn = pen_align::center, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap caps = dash_cap::flat, dash_style dstyle = dash_style::solid, float offset = 0) : org_br(org), width(w), align(algn), start_cap(startcap), end_cap(endcap), cap(caps), style(dstyle), dash_offset(offset) 
+	gdiplus_pen(brush* org, Brush* br, float w, dash_cap startcap = dash_cap::flat, dash_cap endcap = dash_cap::flat, dash_cap caps = dash_cap::flat, dash_style dstyle = dash_style::solid, float offset = 0) : org_br(org), width(w), start_cap(startcap), end_cap(endcap), cap(caps), style(dstyle), dash_offset(offset), gdi_br(br)
 	{
 		p = new Pen(br, width);
-		p->SetAlignment(static_cast<PenAlignment>(align));
+		p->SetAlignment(PenAlignmentCenter);
 		p->SetDashCap(static_cast<DashCap>(caps));
 		p->SetDashOffset(offset);
 		p->SetDashStyle(static_cast<DashStyle>(style));
@@ -273,15 +291,21 @@ public:
 		p->SetStartCap(static_cast<LineCap>(start_cap));
 	};
 	gdiplus_pen(const gdiplus_pen&)=delete;
-	void release_resources() {delete p; p = 0;};
+	virtual ~gdiplus_pen()
+	{
+		delete p;
+	};
+	void update()
+	{
+		if(p)
+			p->SetBrush(gdi_br);
+	};
 	brush* get_brush() const {return org_br;};
 	Pen* get_native_member() {return p;};
 	dash_cap get_start_cap() const {return start_cap;};
 	void set_start_cap(const dash_cap& c) {p->SetStartCap(static_cast<LineCap>(c));};
 	dash_cap get_end_cap() const {return end_cap;};
 	void set_end_cap(const dash_cap& c) {p->SetEndCap(static_cast<LineCap>(c));};
-	pen_align get_align() const {return align;};
-	void set_align(const pen_align& a) {p->SetAlignment(static_cast<PenAlignment>(a));};
 	dash_cap get_dash_cap() const {return cap;};
 	void set_dash_cap(const dash_cap& c) {p->SetDashCap(static_cast<DashCap>(c));};
 	dash_style get_dash_style() const {return style;};
@@ -292,11 +316,11 @@ public:
 	void set_width(float f) {p->SetWidth(f);};
 private:
 	Pen* p;
-	pen_align align;
 	dash_cap start_cap, end_cap, cap;
 	dash_style style;
 	float width, dash_offset;
 	brush* org_br;
+	Brush* gdi_br;
 };
 
 class gdiplus_geometry : 
@@ -310,7 +334,6 @@ public:
 	void end_geometry();
 	bool contains(const point& p); 
 	bool outline_contains(const point& p, pen* pe);
-	void release_resources();
 
 	void add_bezier(const point& p1, const point& p2, const point& p3);
 	void add_beziers(const point* ps, int count);
@@ -333,7 +356,9 @@ class gdiplus_renderer :
 {
 public:
 	gdiplus_renderer(HWND handle, callback<void(const size&)>& cb);
+	gdiplus_renderer(HDC dc);
 	gdiplus_renderer(const gdiplus_renderer&)=delete;
+	virtual ~gdiplus_renderer();
 	HDC get_dc() const {return g->GetHDC();};
 	void begin();
 	void clear(const colour& c);
@@ -366,9 +391,11 @@ public:
 	solid_brush* create_solid_brush(const colour& c);
 	texture_brush* create_texture_brush(texture* image);
 	linear_gradient_brush* create_linear_gradient_brush(const point& start, const point& end, gradient_stop& gradients, bool gamma, const wrap_modes& wrapmode);
-	pen* create_pen(brush* b, float width, pen_align align, dash_cap startcap, dash_cap endcap, dash_cap dash_cap, dash_style dash_style, float offset);
+	pen* create_pen(brush* b, float width, dash_cap startcap, dash_cap endcap, dash_cap dash_cap, dash_style dash_style, float offset);
 	texture* create_texture(const wstring& filename);
 	texture* create_texture(int id, LPWSTR type, HINSTANCE inst);
+	graphics* create_graphics(HWND handle, callback<void(const size&)>& cb);
+	graphics* create_graphics(HDC dc);
 	font* create_font(const wstring& family_name, float size, int fstyle);
 	geometry* create_geometry();
 
@@ -392,7 +419,6 @@ private:
 	size get_surface_size() const;
 	Brush* get_brush(brush* br);
 	Matrix* get_matrix(const matrix& m);
-	void release_resources();
 
 	HWND handle;
 	HDC context;
@@ -405,6 +431,7 @@ private:
 	ULONG_PTR tokens;
 	GdiplusStartupInput startinput;
 	text_rendering_modes textMode;
+	graphics_type type;
 protected:
 	void create_resources();
 };

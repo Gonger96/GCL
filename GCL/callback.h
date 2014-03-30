@@ -10,7 +10,6 @@
    #pragma once
 #endif
 #include "stdafx.h"
-#ifdef __cplusplus
 
 namespace gcl {
 
@@ -111,13 +110,13 @@ public:
 	// Calls all bound delegates
 	void operator() (const _args&... args)
 	{
-		for(auto& itr = prv_coll.begin(); itr < prv_coll.end(); ++itr)
+		for(auto& itr = prv_coll.begin(); itr != prv_coll.end(); ++itr)
 			(*itr)(args...);
-		for(auto& itr = prv_mem_coll.begin(); itr < prv_mem_coll.end(); ++itr)
+		for(auto& itr = prv_mem_coll.begin(); itr != prv_mem_coll.end(); ++itr)
 			(*itr)(args...);
 	};
 	// Releases all bound delegates
-	void release_hooks() {prv_coll.clear(); prv_mem_coll.clear();};
+	void release_hooks() {prv_coll.clear(); prv_mem_coll.clear(); prv_fun_coll.clear();};
 private:
 	vector<func_ptr> prv_coll;
 	vector<mem_func_ptr<return_type(_args...)>> prv_mem_coll;
@@ -125,5 +124,4 @@ private:
 
 }; // end namespace
 
-#endif // cpp
 #endif // header end

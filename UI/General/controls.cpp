@@ -3,6 +3,7 @@
 #include "system.h"
 namespace gcl { namespace ui {
 
+// button
 button::button() : dynamic_drawsurface()
 {
 	shape = 0;
@@ -15,20 +16,11 @@ button::button() : dynamic_drawsurface()
 	set_border_colour(colour(colour::gray));
 	set_title(L"button");
 	set_back_colour(colour(colour::dim_gray));
-	size_changed += make_func_ptr(this, &button::on_size);
+	layouted += make_func_ptr(this, &button::this_layouted);
 	minsize = size(50, 50);
 };
 
-void button::release_resources()
-{
-	release(shape);
-	release(br);
-	release(s_br);
-	release(pn);
-	release(b_br);
-	release(f_br);
-	dynamic_drawsurface::release_resources();
-}
+button::~button(){}
 
 void button::create_resources(graphics* g)
 {
@@ -66,7 +58,7 @@ void button::render(graphics* g)
 		}
 	}
 	for(auto& surf : surfaces)
-		surf->render(g);
+		if(surf->get_visible())surf->render(g);
 }
 
 bool button::contains(const point& p) const
@@ -75,7 +67,7 @@ bool button::contains(const point& p) const
 	return shape->contains(p);
 }
 
-void button::on_size(const size& sz)
+void button::this_layouted()
 {
 	if(!hs_resources) return;
 	br->set_rect(rect(get_position(), size(get_position().x, get_position().y + get_size().height)));
@@ -114,6 +106,55 @@ void button::set_border_colour(const colour& c)
 	if(s_br) s_br->set_colour(c);
 	border_colour_changed(c);
 	if(get_owner()) get_owner()->redraw(get_redraw_rc());
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// static_text
+
+static_text::static_text()
+{
+	bk_br = 0;
+	br = 0;
+	set_back_colour(colour(0));
+	minsize = size(50, 50);
+}
+
+void static_text::set_back_colour(const colour& c)
+{
+	if(!change_if_diff(back_colour, c)) return;
+	back_colour_changed(c);
+	if(bk_br) bk_br->set_colour(c);
+	if(owner) owner->redraw(get_redraw_rc());
+}
+
+void static_text::set_font_colour(const colour& c)
+{
+	if(!change_if_diff(font_colour, c)) return;
+	font_colour_changed(c);
+	if(br) br->set_colour(c);
+	if(owner) owner->redraw(get_redraw_rc());
+}
+
+void static_text::render(graphics* g)
+{
+	dynamic_drawsurface::render(g);
+	g->fill_rect(get_redraw_rc(), bk_br);
+	g->draw_string(title, rect(position, get_redraw_rc().sizef), get_font(), br);
+	for(auto& surf : surfaces)
+		if(surf->get_visible())surf->render(g);
+}
+
+bool static_text::contains(const point& p) const
+{
+	return get_redraw_rc().contains(p);
+}
+
+static_text::~static_text(){}
+
+void static_text::create_resources(graphics* g)
+{
+	br = g->create_solid_brush(get_font_colour());
+	bk_br = g->create_solid_brush(get_back_colour());
+	dynamic_drawsurface::create_resources(g);
 }
 
 };

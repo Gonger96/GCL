@@ -33,13 +33,13 @@ class window :
 {
 public:
 	window(void);
+	virtual ~window();
 	window(const window&) = delete;
-	virtual void release_resources();
 
 	callback<void(const HWND)> handle_created;
 	callback<void(const HWND)> handle_destroyed;
 
-	int show_dialog();
+	int show_dialog(HWND hWnd = 0);
 	// redraw -> überladung für i_drawsurface allein oder mit rectangle  
 	virtual void render(graphics* g);
 	virtual bool contains(const point& p) const;
@@ -80,6 +80,11 @@ public:
 	float get_opacity() const {return opacity;};
 	void set_visible(bool b);
 	void set_enabled(bool b);
+    void set_focus(bool);
+	bool get_focus() const {return focus;};
+	void set_focused_surface(dynamic_drawsurface*);
+	dynamic_drawsurface* get_focused_surface() {return focused_surf;};
+	void close();
 private:
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	colour erase_colour;
@@ -91,6 +96,10 @@ private:
 	float opacity;
 	bool is_mouse_over, is_mouse_dwn;
 	int bottom_s, top_s, topmost_s;
+	bool focus;
+	dynamic_drawsurface* focused_surf;
+	bool shown;
+	bool has_resources;
 protected:
 	virtual LRESULT message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	virtual void on_create_params(unsigned long& style, unsigned long& exstyle, unsigned int& class_style, wstring& classname) {};
