@@ -68,11 +68,11 @@ void stack_panel::layout()
 			{
 				if(orient == orientation::vertical)
 				{
-					y = pddng.top + m.top + last_surf->get_position().y + last_surf->get_size().height;
+					y = m.top + last_surf->get_position().y + last_surf->get_size().height + last_surf->get_margin().bottom;
 				}
 				else
 				{
-					x = pddng.left + m.left + last_surf->get_position().x + last_surf->get_size().width;
+					x = m.left + last_surf->get_position().x + last_surf->get_size().width + last_surf->get_margin().right;
 				}
 			}
 			else
@@ -141,11 +141,11 @@ void stack_panel::layout()
 			{
 				if(orient == orientation::vertical)
 				{
-					y = last_surf->get_position().y - surf->get_size().height - pddng.bottom - m.bottom;
+					y = last_surf->get_position().y - surf->get_size().height - m.bottom - last_surf->get_margin().top;
 				}
 				else
 				{
-					x = last_surf->get_position().x - surf->get_size().width - pddng.right - m.right;
+					x = last_surf->get_position().x - surf->get_size().width - m.right - last_surf->get_margin().left;
 				}
 			}
 			else

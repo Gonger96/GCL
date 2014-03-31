@@ -41,7 +41,6 @@ public:
 private:
 	orientation orient;
 	child_orientation child_orient;
-
 };
 
 };
