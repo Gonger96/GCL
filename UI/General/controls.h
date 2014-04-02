@@ -34,12 +34,12 @@ public:
 	virtual colour get_border_colour() const {return border_colour;};
 	virtual void set_border_colour(const colour& c);
 private:
-    geometry* shape;
-	linear_gradient_brush* br;
-	pen* pn;
-	solid_brush* s_br;
-	solid_brush* b_br;
-	solid_brush* f_br;
+    shared_ptr<geometry> shape;
+	shared_ptr<linear_gradient_brush> br;
+	shared_ptr<pen> pn;
+	shared_ptr<solid_brush> s_br;
+	shared_ptr<solid_brush> b_br;
+	shared_ptr<solid_brush> f_br;
 protected:
 	virtual void create_resources(graphics* g);
 	virtual void this_layouted();
@@ -59,7 +59,7 @@ public:
 	virtual void set_back_colour(const colour& c);
 	virtual void set_font_colour(const colour& c);
 private:
-	solid_brush* br, *bk_br;
+	shared_ptr<solid_brush> br, bk_br;
 protected:
 	virtual void create_resources(graphics* g);
 };

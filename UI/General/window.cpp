@@ -313,7 +313,6 @@ LRESULT CALLBACK window::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 
 LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	try {
 	switch (msg)
 	{
 	case WM_SETFOCUS:
@@ -487,10 +486,6 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		break;
 	default:
 		return DefWindowProc(hWnd, msg, wParam, lParam);
-	}}
-	catch(const exception&)
-	{
-		throw;
 	}
 	return 0;
 }

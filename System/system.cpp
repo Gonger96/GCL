@@ -38,10 +38,12 @@ void app::init()
 {
 	inst = GetModuleHandle(NULL);
 	int cnt = 0;
-	LPWSTR* lpCmdLine = CommandLineToArgvW(GetCommandLineW(), &cnt);
+	LPWSTR cmdw = GetCommandLineW();
+	LPWSTR* lpCmdLine = CommandLineToArgvW(cmdw, &cnt);
 	for(int i = 0; i < cnt; i++)
 		cmd_line.push_back(wstring(lpCmdLine[i]));
 	LocalFree(lpCmdLine);
+	LocalFree(cmdw);
 }
 
 

@@ -24,15 +24,15 @@ button::~button(){}
 
 void button::create_resources(graphics* g)
 {
-	shape = g->create_geometry();
+	shape = shared_ptr<geometry>(g->create_geometry());
 	shape->begin_geometry(point(0,0));
 	shape->add_rounded_rect(rect(get_position(), get_size()), 5, 5);
 	shape->end_geometry();
-	f_br = g->create_solid_brush(get_font_colour());
-	br = g->create_linear_gradient_brush(get_position(), point(get_position().x, get_position().y + get_size().height), gradient_stop(coll_f<2>(0.0f, 1.0f), coll_c<2>(colour(get_effect_colour()), colour(get_back_colour()))));
-	s_br = g->create_solid_brush(get_border_colour());
-	pn = g->create_pen(s_br);
-	b_br = g->create_solid_brush(colour(colour::black));
+	f_br = shared_ptr<solid_brush>(g->create_solid_brush(get_font_colour()));
+	br = shared_ptr<linear_gradient_brush>(g->create_linear_gradient_brush(get_position(), point(get_position().x, get_position().y + get_size().height), gradient_stop(coll_f<2>(0.0f, 1.0f), coll_c<2>(colour(get_effect_colour()), colour(get_back_colour())))));
+	s_br = shared_ptr<solid_brush>(g->create_solid_brush(get_border_colour()));
+	pn = shared_ptr<pen>(g->create_pen(s_br.get()));
+	b_br = shared_ptr<solid_brush>(g->create_solid_brush(colour(colour::black)));
 	dynamic_drawsurface::create_resources(g);
 }
 
@@ -41,20 +41,20 @@ void button::render(graphics* g)
 	dynamic_drawsurface::render(g);
 	if(!visible) return;
 	
-	g->fill_geometry(shape, br);
-	g->draw_geometry(shape, pn);
+	g->fill_geometry(shape.get(), br.get());
+	g->draw_geometry(shape.get(), pn.get());
 	b_br->set_opacity(1);
-	g->draw_string(get_title(), get_redraw_rc(), get_font(), f_br, string_format::direction_left_to_right, horizontal_string_align::middle, vertical_string_align::middle);
+	g->draw_string(get_title(), get_redraw_rc(), get_font(), f_br.get(), string_format::direction_left_to_right, horizontal_string_align::middle, vertical_string_align::middle);
 	if(get_enabled()) 
 	{
 		switch(draw_state)
 		{		
 		case drawing_state::pressed:
 			b_br->set_opacity(0.12f);
-			g->fill_geometry(shape, b_br);	
+			g->fill_geometry(shape.get(), b_br.get());	
 		case drawing_state::hover:
 			b_br->set_opacity(0.06f);
-			g->fill_geometry(shape, b_br);	
+			g->fill_geometry(shape.get(), b_br.get());	
 		}
 	}
 	for(auto& surf : surfaces)
@@ -137,8 +137,8 @@ void static_text::set_font_colour(const colour& c)
 void static_text::render(graphics* g)
 {
 	dynamic_drawsurface::render(g);
-	g->fill_rect(get_redraw_rc(), bk_br);
-	g->draw_string(title, rect(position, get_redraw_rc().sizef), get_font(), br);
+	g->fill_rect(get_redraw_rc(), bk_br.get());
+	g->draw_string(title, rect(position, get_redraw_rc().sizef), get_font(), br.get());
 	for(auto& surf : surfaces)
 		if(surf->get_visible())surf->render(g);
 }
@@ -152,8 +152,8 @@ static_text::~static_text(){}
 
 void static_text::create_resources(graphics* g)
 {
-	br = g->create_solid_brush(get_font_colour());
-	bk_br = g->create_solid_brush(get_back_colour());
+	br = shared_ptr<solid_brush>(g->create_solid_brush(get_font_colour()));
+	bk_br = shared_ptr<solid_brush>(g->create_solid_brush(get_back_colour()));
 	dynamic_drawsurface::create_resources(g);
 }
 

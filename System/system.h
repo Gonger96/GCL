@@ -53,19 +53,18 @@ public:
 		{
 			num = w->show_dialog();
 		}
-		catch(const exception& e)
+		catch(...)
 		{
 			delete g;
 			g = 0;
-			ui::msg_box::show(string_to_unicode_string<char>(e.what()), L"An Exception was thrown", ui::msg_box::ok, ui::msg_box::error);
 			CoUninitialize();
-			return EXIT_FAILURE;
+			throw;
 		}
 		delete g;
 		g = 0;
 		w = 0;
 		if(num != EXIT_SUCCESS)
-			ui::msg_box::show(L"Window exited with code: " + to_wstring(num), L"An Exception was thrown", ui::msg_box::ok, ui::msg_box::error); 
+			ui::msg_box::show(L"Window exited with code: " + to_wstring(num), L"Unsuccessfull termination", ui::msg_box::ok, ui::msg_box::error); 
 		CoUninitialize();
 		return num;
 	}
