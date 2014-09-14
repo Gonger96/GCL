@@ -1,161 +1,328 @@
 #include "stdafx.h"
 #include "controls.h"
-#include "system.h"
+
 namespace gcl { namespace ui {
 
-// button
-button::button() : dynamic_drawsurface()
+// Button
+button::button()
 {
-	shape = 0;
-	pn = 0;
-	br = 0;
-	s_br = 0;
-	b_br = 0;
-	f_br = 0;
-	set_effect_colour(colour(colour::white));
-	set_border_colour(colour(colour::gray));
 	set_title(L"button");
-	set_back_colour(colour(colour::dim_gray));
-	layouted += make_func_ptr(this, &button::this_layouted);
-	minsize = size(50, 50);
-};
+	border_width = 2.f;
+	supress_keypress = true;
+	set_captures_keyboard(false);
+	disp_mode = image_display_modes::seperate;
+	text_halign = horizontal_string_align::middle;
+	text_valign = vertical_string_align::middle;
+	img_halign = horizontal_content_align::left;
+	img_valign = vertical_content_align::middle;
+	back_colour = colour::gcl_dark_gray;
+	cl_hot = colour::gcl_gray;
+	cl_pr = colour::gray;
+	cl_border = colour::gray;
+	cl_borderf = colour::gcl_border;
+	font_colour = colour::white;
+	key_up += make_func_ptr(this, &button::this_key_up);
+}
 
-button::~button(){}
-
-void button::create_resources(graphics* g)
+void button::set_opacity(float f)
 {
-	shape = shared_ptr<geometry>(g->create_geometry());
-	shape->begin_geometry(point(0,0));
-	shape->add_rounded_rect(rect(get_position(), get_size()), 5, 5);
-	shape->end_geometry();
-	f_br = shared_ptr<solid_brush>(g->create_solid_brush(get_font_colour()));
-	br = shared_ptr<linear_gradient_brush>(g->create_linear_gradient_brush(get_position(), point(get_position().x, get_position().y + get_size().height), gradient_stop(coll_f<2>(0.0f, 1.0f), coll_c<2>(colour(get_effect_colour()), colour(get_back_colour())))));
-	s_br = shared_ptr<solid_brush>(g->create_solid_brush(get_border_colour()));
-	pn = shared_ptr<pen>(g->create_pen(s_br.get()));
-	b_br = shared_ptr<solid_brush>(g->create_solid_brush(colour(colour::black)));
-	dynamic_drawsurface::create_resources(g);
+	if(f == get_opacity())
+		return;
+	if(hs_resources)
+	{
+		br_bk->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_pr->set_opacity(f);
+		br_fn->set_opacity(f);
+		br_border->set_opacity(f);
+		br_disabled->set_opacity(f);
+	}
+	dynamic_drawsurface::set_opacity(f);
+}
+
+void button::this_key_up(const virtual_keys& key, const key_extended_params& params)
+{
+	if(!supress_keypress && key == virtual_keys::_return)
+		mouse_click(mouse_buttons::left, 0, get_position());
+}
+
+void button::on_syscolour_changed()
+{
+	if(app::is_high_contrast_app())
+	{
+		br_bk->set_colour(colour::button_face);
+		br_fn->set_colour(colour(colour::gray_text));
+		br_hot->set_colour(colour::highlight);
+		br_pr->set_colour(colour::hotlight);
+	}
+	else
+	{
+		br_bk->set_colour(back_colour);
+		br_fn->set_colour(font_colour);
+		br_hot->set_colour(cl_hot);
+		br_pr->set_colour(cl_pr);
+	}
+	dynamic_drawsurface::on_syscolour_changed();
+	if(owner)owner->redraw(get_bounds());
 }
 
 void button::render(graphics* g)
 {
-	dynamic_drawsurface::render(g);
-	if(!visible) return;
-	
-	g->fill_geometry(shape.get(), br.get());
-	g->draw_geometry(shape.get(), pn.get());
-	b_br->set_opacity(1);
-	g->draw_string(get_title(), get_redraw_rc(), get_font(), f_br.get(), string_format::direction_left_to_right, horizontal_string_align::middle, vertical_string_align::middle);
-	if(get_enabled()) 
+	g->push_clip(clip(get_rect()));
+	bool hc = app::is_high_contrast_app();
+	init_resources(g);
+	if(get_focus() && get_enabled())
+		br_border->set_colour(cl_borderf);
+	else if(!get_focus() || !get_enabled())
+		br_border->set_colour(cl_border);
+	pn_border->update();
+	if(get_enabled())
 	{
-		switch(draw_state)
-		{		
+		switch(get_drawing_state())
+		{
+		case drawing_state::normal:
+			g->fill_rect(get_rect(), br_bk.get());
+			break;
+		case drawing_state::hot:
+			g->fill_rect(get_rect(), br_hot.get());
+			break;
 		case drawing_state::pressed:
-			b_br->set_opacity(0.12f);
-			g->fill_geometry(shape.get(), b_br.get());	
-		case drawing_state::hover:
-			b_br->set_opacity(0.06f);
-			g->fill_geometry(shape.get(), b_br.get());	
+			g->fill_rect(get_rect(), br_pr.get());
 		}
+		if(image)
+			g->draw_texture(image.get(), get_image_rect(), static_cast<unsigned char>(get_opacity()*255));
+		g->draw_string(get_title(), get_text_rect(), get_font(), br_fn.get(), string_format::direction_left_to_right, text_halign, text_valign);
+		g->pop_clip();
+		g->draw_rect(rect(get_position().x+border_width/2.f, get_position().y+border_width/2.f, get_size().width-border_width, get_size().height-border_width), pn_border.get());
 	}
-	for(auto& surf : surfaces)
-		if(surf->get_visible())surf->render(g);
+	else
+	{
+		g->fill_rect(get_rect(), br_bk.get());
+		if(image)
+			g->draw_texture(image.get(), get_image_rect(), static_cast<unsigned char>(get_opacity()*255));
+		g->draw_rect(get_rect(), pn_border.get());
+		g->draw_rect(rect(get_position().x+border_width/2.f, get_position().y+border_width/2.f, get_size().width-border_width, get_size().height-border_width), pn_border.get());
+		g->draw_string(get_title(), get_text_rect(), get_font(), br_fn.get(), string_format::direction_left_to_right, text_halign, text_valign);
+		g->pop_clip();
+		g->fill_rect(get_rect(), br_disabled.get());
+	}
+	dynamic_drawsurface::render(g);
 }
 
-bool button::contains(const point& p) const
+void button::create_resources(graphics* g)
 {
-	if(!shape) return false;
-	return shape->contains(p);
+	if(app::is_high_contrast_app())
+	{
+		br_bk = shared_ptr<solid_brush>(g->create_solid_brush(colour::button_face));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(colour::highlight));
+		br_pr = shared_ptr<solid_brush>(g->create_solid_brush(colour::hotlight));
+		br_fn = shared_ptr<solid_brush>(g->create_solid_brush(colour::gray_text));
+	}
+	else
+	{
+		br_bk = shared_ptr<solid_brush>(g->create_solid_brush(back_colour));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(cl_hot));
+		br_pr = shared_ptr<solid_brush>(g->create_solid_brush(cl_pr));
+		br_fn = shared_ptr<solid_brush>(g->create_solid_brush(font_colour));
+	}
+	br_disabled = shared_ptr<solid_brush>(g->create_solid_brush(colour(50, colour::black)));
+	br_border = shared_ptr<solid_brush>(g->create_solid_brush(cl_border));
+	pn_border = shared_ptr<pen>(g->create_pen(br_border.get(), border_width));
+	dynamic_drawsurface::create_resources(g);
 }
 
-void button::this_layouted()
+rect button::get_text_rect()
 {
-	if(!hs_resources) return;
-	br->set_rect(rect(get_position(), size(get_position().x, get_position().y + get_size().height)));
-	shape->begin_geometry(point(0,0));
-	shape->add_rounded_rect(rect(get_position(), get_size()), 5, 5);
-	shape->end_geometry();
+	if(!image || disp_mode == image_display_modes::overlay)
+		return rect(get_position().x + border_width, get_position().y + border_width, get_size().width - 2.f*border_width, get_size().height-2.f*border_width);
+	else
+	{
+		rect rc = get_rect();
+		rc.position.x += border_width;
+		rc.position.y += border_width;
+		rc.sizef.width -= 2.f*border_width;
+		rc.sizef.height -= 2.f*border_width;
+		if(img_halign != horizontal_content_align::middle)
+			rc.sizef.width -= image->get_width();
+		if(img_halign == horizontal_content_align::left)
+			rc.position.x += image->get_width();
+		
+		if(img_halign == horizontal_content_align::middle)
+		{
+			switch(img_valign)
+			{
+			case vertical_content_align::top:
+				rc.position.y += image->get_height();
+				rc.sizef.height -= image->get_height();
+				break;
+			case vertical_content_align::middle:
+				rc.position.y += image->get_height()/2.f + (get_size().height - 2.f*border_width)/2.f;
+				rc.sizef.height -= image->get_height()/2.f + (get_size().height - 2.f*border_width)/2.f;
+				break;
+			case vertical_content_align::bottom:
+				rc.sizef.height -= image->get_height();
+			}
+		}
+		return rc;
+	}
+}
+
+rect button::get_image_rect()
+{
+	float x, y;
+	switch(img_halign)
+	{
+	case horizontal_content_align::left:
+		x = get_position().x + border_width;
+		break;
+	case horizontal_content_align::middle:
+		x = get_position().x+border_width+(get_size().width-2.f*border_width)/2.f-image->get_width()/2.f;
+		break;
+	case horizontal_content_align::right:
+		x = get_position().x + border_width + get_size().width - 2.f*border_width - image->get_width();
+	}
+	switch(img_valign)
+	{
+	case vertical_content_align::top:
+		y = get_position().y + border_width;
+		break;
+	case vertical_content_align::middle:
+		y = get_position().y+border_width + (get_size().height-2.f*border_width)/2.f-image->get_height()/2.f;
+		break;
+	case vertical_content_align::bottom:
+		y = get_position().y + border_width + get_size().height - 2.f*border_width - image->get_height();
+	}
+	return rect(x, y, static_cast<float>(image->get_width()), static_cast<float>(image->get_height()));
 }
 
 void button::set_back_colour(const colour& c)
 {
-	if(!change_if_diff(back_colour, c)) return;
-	if(br) br->set_gradients(gradient_stop(coll_f<2>(0.0f, 1.0f), coll_c<2>(colour(get_effect_colour()), colour(get_back_colour()))));
+	if(!change_if_diff(back_colour, c))
+		return;
+	if(br_bk)
+		br_bk->set_colour(c);
 	back_colour_changed(c);
-	if(get_owner()) get_owner()->redraw(get_redraw_rc());
+	if(owner)
+		owner->redraw(get_bounds());
 }
 
-void button::set_effect_colour(const colour& c)
+void button::set_font_colour(const colour& c) 
 {
-	if(!change_if_diff(effect_colour, c)) return;
-	if(br) br->set_gradients(gradient_stop(coll_f<2>(0.0f, 1.0f), coll_c<2>(colour(get_effect_colour()), colour(get_back_colour()))));
-	effect_colour_changed(c);
-	if(get_owner()) get_owner()->redraw(get_redraw_rc());
-}
-
-void button::set_font_colour(const colour& c)
-{
-	if(!change_if_diff(font_colour, c)) return;
-	if(f_br) f_br->set_colour(c);
+	if(!change_if_diff(font_colour, c))
+		return;
+	if(br_fn)
+		br_fn->set_colour(c);
 	font_colour_changed(c);
-	if(get_owner()) get_owner()->redraw(get_redraw_rc());
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void button::set_image_display_mode(const image_display_modes& disp)
+{
+	if(!change_if_diff(disp_mode, disp))
+		return;
+	image_display_mode_changed(disp);
+	if(owner && image)
+		owner->redraw(get_bounds());
+}
+
+void button::set_text_halign(const horizontal_string_align& align)
+{
+	if(!change_if_diff(text_halign, align))
+		return;
+	text_halign_changed(align);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void button::set_text_valign(const vertical_string_align& align)
+{
+	if(!change_if_diff(text_valign, align))
+		return;
+	text_valign_changed(align);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void button::set_image_halign(const horizontal_content_align& align)
+{
+	if(!change_if_diff(img_halign, align))
+		return;
+	image_halign_changed(align);
+	if(owner && image)
+		owner->redraw(get_bounds());
+}
+
+void button::set_image_valign(const vertical_content_align& align)
+{
+	if(!change_if_diff(img_valign, align))
+		return;
+	image_valign_changed(align);
+	if(owner && image)
+		owner->redraw(get_bounds());
+}
+
+void button::set_hot_colour(const colour& c)
+{
+	if(!change_if_diff(cl_hot, c))
+		return;
+	if(br_hot)
+		br_hot->set_colour(c);
+	hot_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void button::set_pressed_colour(const colour& c)
+{
+	if(!change_if_diff(cl_pr, c))
+		return;
+	if(br_pr)
+		br_pr->set_colour(c);
+	pressed_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
 }
 
 void button::set_border_colour(const colour& c)
 {
-	if(!change_if_diff(border_colour, c)) return;
-	if(s_br) s_br->set_colour(c);
+	if(!change_if_diff(cl_border, c))
+		return;
 	border_colour_changed(c);
-	if(get_owner()) get_owner()->redraw(get_redraw_rc());
+	if(owner)
+		owner->redraw(get_bounds());
 }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// static_text
 
-static_text::static_text()
+void button::set_border_focused_colour(const colour& c)
 {
-	bk_br = 0;
-	br = 0;
-	set_back_colour(colour(0));
-	minsize = size(50, 50);
+	if(!change_if_diff(cl_borderf, c))
+		return;
+	border_focused_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
 }
 
-void static_text::set_back_colour(const colour& c)
+void button::set_border_width(float f)
 {
-	if(!change_if_diff(back_colour, c)) return;
-	back_colour_changed(c);
-	if(bk_br) bk_br->set_colour(c);
-	if(owner) owner->redraw(get_redraw_rc());
+	if(!change_if_diff(border_width, f))
+		return;
+	if(pn_border)
+		pn_border->set_width(border_width);
+	border_width_changed(f);
+	if(owner)
+		owner->redraw(get_bounds());
 }
 
-void static_text::set_font_colour(const colour& c)
+void button::set_image(texture* img)
 {
-	if(!change_if_diff(font_colour, c)) return;
-	font_colour_changed(c);
-	if(br) br->set_colour(c);
-	if(owner) owner->redraw(get_redraw_rc());
+	if(image.get() == img)
+		return;
+	image.reset(img);
+	image_changed(img);
+	if(owner && image)
+		owner->redraw(get_bounds());
 }
-
-void static_text::render(graphics* g)
-{
-	dynamic_drawsurface::render(g);
-	g->fill_rect(get_redraw_rc(), bk_br.get());
-	g->draw_string(title, rect(position, get_redraw_rc().sizef), get_font(), br.get());
-	for(auto& surf : surfaces)
-		if(surf->get_visible())surf->render(g);
-}
-
-bool static_text::contains(const point& p) const
-{
-	return get_redraw_rc().contains(p);
-}
-
-static_text::~static_text(){}
-
-void static_text::create_resources(graphics* g)
-{
-	br = shared_ptr<solid_brush>(g->create_solid_brush(get_font_colour()));
-	bk_br = shared_ptr<solid_brush>(g->create_solid_brush(get_back_colour()));
-	dynamic_drawsurface::create_resources(g);
-}
+// Button
 
 };
 };

@@ -5,16 +5,22 @@
 *                   http://github.com/Gonger96/GCL                           *
 *                       Precompiled Header                                   *
 *****************************************************************************/
-#ifndef RENDERER_STDAFX_H
-#define RENDERER_STDAFX_H
-#ifdef _MSC_VER
-#pragma once
-#endif
 
+#ifndef RENDERER_STDAFX_H
+#define RENDERER_STDAFX_H   
+
+#ifdef _MSC_VER
+#	pragma once
+#	define _CRT_SECURE_NO_WARNINGS 
+#endif
+#include <stdlib.h>
+#include <crtdbg.h>
+#define OEMRESOURCE
+#define GDIPVER 0x0110
 // Windows includes
 #include <Windows.h>
 #include <windowsx.h>
-
+#include <dwmapi.h>
 // Direct2D includes
 #include <D2D1.h>
 #include <d2d1helper.h>
@@ -32,6 +38,15 @@ using namespace D2D1;
 #ifdef _MSC_VER
 #pragma comment (lib, "GdiPlus.lib")
 #pragma comment (lib, "ShlwAPI.lib")
+#pragma comment(lib, "Msimg32.lib")
+#endif
+
+#include <Uxtheme.h>
+#include <CommCtrl.h>
+#include <vssym32.h>
+#ifdef _MSC_VER
+#pragma comment (lib, "dwmapi.lib")
+#pragma comment(lib, "ComCtl32.lib")
 #endif
 
 // Std includes
@@ -48,6 +63,9 @@ using namespace D2D1;
 #include <exception>
 #include <utility>
 #include <mutex>
+#define _USE_MATH_DEFINES
+#include <math.h>
+#include <cmath>
 #include <atomic>
 #include <sstream>
 #include <iomanip>
@@ -56,12 +74,21 @@ using namespace D2D1;
 #include <list>
 #include <chrono>
 #include <locale>
+#include <stack>
 using namespace std;
+
+#ifdef max
+#	undef max
+#endif
+
+#ifdef min
+#	undef min
+#endif
 
 // Enables Visualstyles for Win32-dialogs
 // If you are using another compiler, you need to add a manifest
 #ifdef _MSC_VER
-#pragma comment(linker,"\"/manifestdependency:type='win32' \
+#	pragma comment(linker,"\"/manifestdependency:type='win32' \
 name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif

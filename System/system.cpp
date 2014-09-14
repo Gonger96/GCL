@@ -3,6 +3,7 @@
 
 namespace gcl {
 
+// Resource 
 HRSRC resource::alloc(HINSTANCE inst, int id, LPWSTR type, void** data)
 {
 	HRSRC res = FindResource(inst, MAKEINTRESOURCE(id), type);
@@ -19,32 +20,36 @@ void resource::free(HRSRC res)
 {
 	if(FreeResource(res)) throw invalid_argument("Unable to free resource");
 }
+// Resource
 
+// Desktop
 size desktop::get_size()
 {
 	RECT rc = {};
 	GetClientRect(GetDesktopWindow(), &rc);
 	return size(static_cast<float>(rc.right - rc.left), static_cast<float>(rc.bottom - rc.top));
 }
+// Desktop
 
-
+// Application
 graphics* app::g = 0;
 ui::window* app::w = 0;
 bool app::app_started = false;
 HINSTANCE app::inst = 0;
-vector<wstring> app::cmd_line = vector<wstring>();
 
 void app::init()
 {
 	inst = GetModuleHandle(NULL);
-	int cnt = 0;
-	LPWSTR cmdw = GetCommandLineW();
-	LPWSTR* lpCmdLine = CommandLineToArgvW(cmdw, &cnt);
-	for(int i = 0; i < cnt; i++)
-		cmd_line.push_back(wstring(lpCmdLine[i]));
-	LocalFree(lpCmdLine);
-	LocalFree(cmdw);
 }
 
+bool app::is_high_contrast_app()
+{
+	HIGHCONTRAST hcntr = {};
+	hcntr.cbSize = sizeof(HIGHCONTRAST);
+	if(!SystemParametersInfo(SPI_GETHIGHCONTRAST, 0, &hcntr, 0))
+		throw runtime_error("SystemParametersInfo failed");
+	return (hcntr.dwFlags & HCF_HIGHCONTRASTON) == HCF_HIGHCONTRASTON;
+}
+// Application
 
 };

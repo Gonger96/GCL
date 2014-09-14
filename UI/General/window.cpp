@@ -2,9 +2,12 @@
 #include "window.h"
 namespace gcl { namespace ui {
 
+// Window
+bool window::queue_running = false;
 
-window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location)
+window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), ico(0), surf_cur(0), ico_sm(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location)
 {
+	cur = LoadCursor(NULL, IDC_ARROW);
 	set_min_size(size(0,0));
 	has_resources = false;
 	set_max_size(size::max_size());
@@ -12,6 +15,7 @@ window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over)
 	bottom_s = 0;
 	top_s = 0;
 	topmost_s = 0;
+	opacity = 1.f;
 	shown = false;
 	focused_surf = 0;
 }
@@ -19,8 +23,12 @@ window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over)
 void window::create_resources(graphics* g)
 {
 	has_resources = true;
-	_graphics->set_antialias(true);
-	_graphics->set_text_rendering_mode(text_rendering_modes::antialias);
+	if(!ico)
+		ico = shared_ptr<icon>(g->create_icon(system_icon::app));
+	if(!ico_sm)
+		ico_sm = shared_ptr<icon>(g->create_icon(system_icon::app));
+	if(!m_font)
+		m_font = shared_ptr<font>(g->get_system_font());
 };
 
 window::~window()
@@ -44,19 +52,28 @@ void window::render(graphics* g)
 	g->begin();
 	g->clear(erase_colour);
 	for(auto& surf : surfaces)
-		if(surf->get_visible())surf->render(g);
+	{
+		if(surf->get_visible())
+		{
+			g->set_transform(surf->get_transform());
+			surf->render(g);
+		}
+	}
 	g->end();
 }
 
-void window::redraw() {InvalidateRect(handle, 0, FALSE);}
+void window::redraw() 
+{
+	InvalidateRect(handle, 0, FALSE);
+}
 
 void window::redraw(const rect& s)
 {
 	RECT rc;
-	rc.bottom = static_cast<int>(s.sizef.height+s.position.y+1);
-	rc.right = static_cast<int>(s.sizef.width+s.position.x+1);
-	rc.left = static_cast<int>(s.position.x+1);
-	rc.top = static_cast<int>(s.position.y+1);
+	rc.bottom = static_cast<int>(s.sizef.height+5+s.position.y-5);
+	rc.right = static_cast<int>(s.sizef.width+5+s.position.x-5);
+	rc.left = static_cast<int>(s.position.x-5);
+	rc.top = static_cast<int>(s.position.y-5);
 	InvalidateRect(handle, &rc, FALSE);
 }
 
@@ -69,7 +86,8 @@ void window::set_enabled(bool b)
 {
 	if(!change_if_diff(enabled, b)) return;
 	enabled_changed(b);
-	if(handle)EnableWindow(handle, b);
+	if(handle)
+		EnableWindow(handle, b);
 	redraw();
 };
 
@@ -123,8 +141,8 @@ void window::layout()
 		}
 		surf->layout();
 	}
-	redraw();
 	layouted();
+	redraw();
 }
 
 void window::set_padding(const padding& p)
@@ -152,6 +170,8 @@ void window::add_surface(dynamic_drawsurface* surf)
 		surfaces.push_front(surf);
 		topmost_s++;
 	}
+	if(surf->get_tab_index() == 0)
+		surf->set_tab_index(surfaces.size()-1);
 	layout();
 	surface_added(surf);
 }
@@ -230,8 +250,14 @@ void window::set_focus(bool b)
 void window::set_focused_surface(dynamic_drawsurface* surf)
 {
 	if(focused_surf == surf) return;
-	if(focused_surf)focused_surf->set_focus(false);
-	if(surf)surf->set_focus(true);
+	if(focused_surf)
+	{
+		focused_surf->set_focus(false);
+	}
+	if(surf)
+	{
+		surf->set_focus(true);
+	}
 	focused_surf = surf;
 }
 
@@ -345,14 +371,15 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			is_mouse_dwn = true;
 			for(auto& surf : surfaces)
 			{
-				if(surf->contains(p) && surf->is_available())
+				if(surf->contains(p) && surf->get_visible())
 				{
-					surf->on_mouse_down(btns, static_cast<int>(wParam), p);
+					if(surf->get_enabled())
+						surf->on_mouse_down(btns, static_cast<int>(wParam), p);
 					risen = true;
 				}
 			}
 			if(!risen) mouse_down(btns, static_cast<int>(wParam), p);
-			InvalidateRect(hWnd, 0, FALSE);
+			InvalidateRect(hWnd, 0, TRUE);
 			break;
 		}
 	case WM_LBUTTONUP:
@@ -368,9 +395,10 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			bool risen = false;
 			for(auto& surf : surfaces)
 			{
-				if((surf->contains(p) || surf->get_mouse_down()) && surf->is_available() && is_mouse_dwn)
+				if((surf->contains(p) || surf->is_mouse_down()) && surf->get_visible() && is_mouse_dwn)
 				{
-					surf->on_mouse_up(btns, static_cast<int>(wParam), p);
+					if(surf->get_enabled())
+						surf->on_mouse_up(btns, static_cast<int>(wParam), p);
 					risen = true;
 				}
 			}
@@ -392,13 +420,21 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			bool risen = false;
 			for(auto& surf : surfaces)
 			{
-				if(surf->contains(p) && surf->is_available())
+				if(surf->contains(p) && surf->get_visible())
 				{
-					surf->on_mouse_dbl_click(mouse_buttons::middle, static_cast<int>(wParam), p);
+					if(surf->get_enabled())
+						surf->on_mouse_dbl_click(mouse_buttons::middle, static_cast<int>(wParam), p);
 					risen = true;
 				}
 			}
-			if(!risen) mouse_dbl_click(mouse_buttons::middle, static_cast<int>(wParam), p);
+			if(!risen)
+			{
+				auto s = get_focused_surface();
+				if(s)
+					s->set_focus(false);
+				set_focus(true);
+				mouse_dbl_click(mouse_buttons::middle, static_cast<int>(wParam), p);
+			}
 			break;
 		}
 	case WM_MOUSEMOVE:
@@ -407,19 +443,20 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			bool risen = false;
 			for(auto& surf : surfaces)
 			{
-				if(surf->contains(p) && surf->is_available())
+				if(surf->contains(p) && surf->get_visible())
 				{
-					if(!surf->get_mouse_over())
-						surf->on_mouse_enter(static_cast<int>(wParam), p);
-					surf->on_mouse_move(static_cast<int>(wParam), p);
+					if(!surf->is_mouse_over() && surf->get_enabled())
+						surf->on_mouse_enter(p);
+					if(surf->get_enabled())
+						surf->on_mouse_move(static_cast<int>(wParam), p);
 					risen = true;
 				}
-				else if(surf->get_mouse_over() && surf->is_available())
-					surf->on_mouse_leave(static_cast<int>(wParam), p);
+				else if(surf->is_mouse_over() && surf->is_available())
+					surf->on_mouse_leave(p);
 				if(!is_mouse_over)
 				{
-					mouse_enter(static_cast<int>(wParam), p);
-					if(surf->get_mouse_down() && !(((wParam & mouse_modifiers::l_button) == mouse_modifiers::l_button) || ((wParam & mouse_modifiers::r_button) == mouse_modifiers::r_button) || ((wParam & mouse_modifiers::m_button) == mouse_modifiers::m_button)) )
+					mouse_enter(p);
+					if(surf->is_mouse_down() && !(((wParam & mouse_modifiers::l_button) == mouse_modifiers::l_button) || ((wParam & mouse_modifiers::r_button) == mouse_modifiers::r_button) || ((wParam & mouse_modifiers::m_button) == mouse_modifiers::m_button)) )
 						surf->crt_up();
 					InvalidateRect(hWnd, 0, FALSE);
 				}
@@ -439,9 +476,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	case WM_MOUSELEAVE:
 		is_mouse_over = false;
 		is_mouse_dwn = false;
-		for(auto& surf : surfaces) surf->on_mouse_leave(0, point(-1.f, -1.f));;
+		for(auto& surf : surfaces) surf->on_mouse_leave(point(-1.f, -1.f));;
 		InvalidateRect(hWnd, 0, TRUE);
-		mouse_leave(static_cast<int>(wParam), point((float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam)));
+		mouse_leave(point((float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam)));
 		break;
 	case WM_SIZE:
 		{
@@ -456,11 +493,11 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			case SIZE_RESTORED:
 				state = window_states::normal;
 			}
-			size_changed(get_size());
 			layout();
+			size_changed(get_size(), static_cast<resizing_types>(wParam));
 			for(auto& surf : surfaces) 
 			{
-				surf->size_changed(surf->get_size());
+				surf->size_changed(surf->get_size(), static_cast<resizing_types>(wParam));
 			}
 			InvalidateRect(hWnd, 0, TRUE);
 			break;
@@ -474,11 +511,267 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			p->ptMinTrackSize.y = static_cast<long>(minsize.height);
 			break;
 		}
+	case WM_MOUSEWHEEL:
+		{
+			bool risen = false;
+			point pos = point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_mouse_wheel(GET_KEYSTATE_WPARAM(wParam), pos, GET_WHEEL_DELTA_WPARAM(wParam));
+					risen = true;
+				}
+			}
+			if(!risen)
+				mouse_wheel(GET_KEYSTATE_WPARAM(wParam), pos, GET_WHEEL_DELTA_WPARAM(wParam));
+			break;
+		}
+	case WM_MOUSEHWHEEL:
+		{
+			bool risen = false;
+			point pos = point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_mouse_h_wheel(GET_KEYSTATE_WPARAM(wParam), pos, GET_WHEEL_DELTA_WPARAM(wParam));
+					risen = true;
+				}
+			}
+			if(!risen)
+				mouse_h_wheel(GET_KEYSTATE_WPARAM(wParam), pos, GET_WHEEL_DELTA_WPARAM(wParam));
+			break;
+		}
+	case WM_KEYDOWN:
+		{
+			if(static_cast<virtual_keys>(wParam) == virtual_keys::tab)
+			{
+				auto surf = get_focused_surface();
+				if(surf)
+				{
+					if(surf->on_tab_pressed())
+					{
+						unsigned last_tab = surf->get_tab_index();
+						auto nexts = surfaces.end();
+						for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+						{
+							if((*itr)->get_tab_stop() && (*itr)->is_available())
+							{
+								if(nexts == surfaces.end())
+								{
+									if((*itr)->get_tab_index() > last_tab)
+									{nexts = itr;}
+								}
+								else
+								{
+									if((*itr)->get_tab_index() > last_tab && (*itr)->get_tab_index() < (*nexts)->get_tab_index())
+									{nexts == itr;}
+								}
+							}
+						}
+						if(nexts != surfaces.end()) 
+						{
+							(*nexts)->set_focus(true);
+						}
+						else
+						{
+							surf->set_focus(false);
+						}
+					}
+				}
+				else
+				{
+					auto sitr = surfaces.end();
+					for(auto itr = surfaces.begin(); itr!=surfaces.end(); ++itr)
+					{
+						if((*itr)->get_tab_stop() && (*itr)->is_available())
+						{
+							if(sitr == surfaces.end())
+								sitr = itr;
+							else
+							{
+								if((*itr)->get_tab_index() < (*sitr)->get_tab_index())
+									sitr = itr;
+							}
+						}
+					}
+					if(sitr != surfaces.end())
+						(*sitr)->set_focus(true);
+				}
+			}
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_key_down(static_cast<virtual_keys>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				key_down(static_cast<virtual_keys>(wParam), params);
+			auto surf = get_focused_surface();
+			if(surf && wParam == VK_APPS)
+				surf->on_menu_opening();
+			break;
+		}
+	case WM_KEYUP:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_key_up(static_cast<virtual_keys>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				key_up(static_cast<virtual_keys>(wParam), params);
+			break;
+		}
+	case WM_SYSKEYDOWN:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_syskey_down(static_cast<virtual_keys>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				syskey_down(static_cast<virtual_keys>(wParam), params);
+			return DefWindowProc(hWnd, msg, wParam, lParam);
+		}
+	case WM_SYSKEYUP:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_syskey_up(static_cast<virtual_keys>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				syskey_up(static_cast<virtual_keys>(wParam), params);
+			return DefWindowProc(hWnd, msg, wParam, lParam);
+		}
+	case WM_CHAR:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_char_sent(static_cast<char>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				char_sent(static_cast<char>(wParam), params);
+			break;
+		}
+	case WM_DEADCHAR:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_deadchar_sent(static_cast<char>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				deadchar_sent(static_cast<char>(wParam), params);
+			break;
+		}
+	case WM_SETCURSOR:
+		if(LOWORD(lParam) == HTCLIENT) 
+		{
+			SetCursor(surf_cur.get_cursor() ? surf_cur.get_cursor() : cur.get_cursor());
+			return TRUE;
+		}
+		return DefWindowProc(hWnd, msg, wParam, lParam);
+	case WM_GCL_CURSORCHANGED:
+		{
+			surf_cur = cursor_surface(reinterpret_cast<HCURSOR>(wParam));
+			SendMessage(hWnd, WM_SETCURSOR, 0, MAKELONG(HTCLIENT, 0));
+			break;
+		}
 	case WM_CLOSE:
 		DestroyWindow(hWnd);
 		break;
-	//case WM_DISPLAYCHANGE:
-		
+	case WM_SYSCOLORCHANGE: // Gucke nach älteren Systemen
+		{
+			syscolour_changed();
+			for(auto& surf : surfaces)
+			{
+				surf->on_syscolour_changed();
+			}
+			break;
+		}
 	case WM_DESTROY:
 		handle_destroyed(hWnd);
 		shown = false;
@@ -490,19 +783,17 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	return 0;
 }
 
-int window::show_dialog(HWND hWndOwner)
+int window::show(window* win, bool use_handle)
 {
 	if(shown) throw invalid_argument("Window already exists");
 	if(_graphics && !has_resources) create_resources(_graphics);
-	time_t tm;
-	time(&tm);
-	wstring classname = L"GCL_hWndWrapp&" + to_wstring(tm);
+	wstring classname = gcl_create_classname(L"GCL_hWndWrapp&");
 	WNDCLASSEX wcex = {};
 	wcex.cbSize = sizeof(WNDCLASSEX);
 	wcex.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
-	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-	wcex.hIconSm = wcex.hIcon;
+	wcex.hCursor = cur.get_cursor();
+	wcex.hIcon = ico ? ico->get_icon() : LoadIcon(NULL, IDI_APPLICATION);
+	wcex.hIconSm = ico_sm ? ico_sm->get_icon() : wcex.hIcon;
 	wcex.hInstance = GetModuleHandle(NULL);
 	wcex.lpszClassName  = classname.c_str();
 	wcex.style = CS_DROPSHADOW | CS_DBLCLKS;
@@ -559,7 +850,7 @@ int window::show_dialog(HWND hWndOwner)
 	}
 	if(!RegisterClassEx(&wcex))
 		throw runtime_error("Registering windowclass failed. (" + to_string(GetLastError()) + ")");
-	HWND hWnd = CreateWindowEx(exstyle, classname.c_str(), title.c_str(), styles, static_cast<int>(location.x), static_cast<int>(location.y), static_cast<int>(sizef.width), static_cast<int>(sizef.height), hWndOwner, 0, GetModuleHandle(NULL), this); 
+	HWND hWnd = CreateWindowEx(exstyle, classname.c_str(), title.c_str(), styles, static_cast<int>(location.x), static_cast<int>(location.y), static_cast<int>(sizef.width), static_cast<int>(sizef.height), (win&&use_handle) ? win->get_handle() : 0, 0, GetModuleHandle(NULL), this); 
 	if(!hWnd) throw runtime_error("Creating window failed. (" + to_string(GetLastError()) + ")");
 	handle = hWnd;
 	handle_created(hWnd);
@@ -577,12 +868,23 @@ int window::show_dialog(HWND hWndOwner)
 		break;
 	};
 	shown = true;
+	if(win)
+		win->set_enabled(false);
 	UpdateWindow(hWnd);
+	if(queue_running)
+		return 0;
 	MSG msg;
+	queue_running = true;
 	while(GetMessage(&msg, 0, 0, 0) > 0)
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
+	}
+	UnregisterClass(classname.c_str(), GetModuleHandle(NULL));
+	if(win)
+	{
+		win->set_enabled(true);
+		win->set_focus(true);
 	}
 	return msg.wParam;
 }
@@ -624,7 +926,7 @@ void window::set_size(const size& sz, bool redraw)
 	if(sizef == sz) return; 
 	sizef.width =  max(min(maxsize.width, sz.width), minsize.width);
 	sizef.height =  max(min(maxsize.height, sz.height), minsize.height);
-	size_changed(sz); 
+	size_changed(sz, resizing_types::restored); 
 	if(redraw) layout();
 	if(!handle) return;
 	SetWindowPos(handle, 0, 0, 0, static_cast<int>(sz.width), static_cast<int>(sz.height), SWP_NOMOVE | SWP_NOZORDER);
@@ -666,10 +968,134 @@ bool window::contains(const point& p) const
 
 void window::set_opacity(float val)
 {
+	if(opacity == val) return;
 	if(val < 0 || val > 1) throw invalid_argument("Parameter \"val\" must be greater than 0 and lesser 1");
+	opacity = val;
 	SetWindowLong(handle, GWL_EXSTYLE, GetWindowLong(handle, GWL_EXSTYLE) | WS_EX_LAYERED);
 	SetLayeredWindowAttributes(handle, 0, static_cast<BYTE>(255*val), LWA_ALPHA);
+	opacity_changed(val);
 }
+
+LRESULT window::send_message(UINT msg, LPARAM lParam, WPARAM wParam)
+{
+	return SendMessage(handle, msg, wParam, lParam);
+}
+
+void window::set_icon(icon* ico_)
+{
+	if(ico.get() == ico_) return;
+	ico.reset(ico_);
+	if(!handle) return;
+	if(ico)
+	{
+		SetClassLong(handle, GCL_HICON, reinterpret_cast<LONG>(ico->get_icon()));
+	}
+	else
+	{
+		SetClassLong(handle, GCL_HICON, 0);
+	}
+}
+
+void window::set_small_icon(icon* ico_)
+{
+	if(ico_sm.get() == ico_) return;
+	ico_sm.reset(ico_);
+	if(!handle) return;
+	if(ico_sm)
+	{
+		SetClassLong(handle, GCL_HICONSM, reinterpret_cast<LONG>(ico_sm->get_icon()));
+	}
+	else
+	{
+		SetClassLong(handle, GCL_HICONSM, 0);
+	}
+}
+
+void window::set_cursor(const cursor_surface& cur_)
+{
+	if(cur.get_cursor() == cur_.get_cursor() || cur_.get_cursor() == 0)
+		return;
+	cur = cur_;
+	SendMessage(handle, WM_SETCURSOR, reinterpret_cast<WPARAM>(handle), MAKELONG(HTCLIENT, 0));
+}
+
+cursor_surface window::get_cursor() const
+{
+	return cur;
+}
+
+bool window::flash(bool invert)
+{
+	return FlashWindow(handle, invert) != 0;
+}
+
+bool window::flash(const flash_modes& mode, unsigned int flash_count, const chrono::milliseconds& flash_duration)
+{
+	FLASHWINFO inf;
+	inf.cbSize = sizeof(FLASHWINFO);
+	inf.dwFlags = static_cast<DWORD>(mode);
+	inf.dwTimeout = static_cast<DWORD>(flash_duration.count());
+	inf.hwnd = handle;
+	inf.uCount = flash_count;
+	return FlashWindowEx(&inf) != 0;
+}
+
+void window::set_font(font* f)
+{
+	if(f == m_font.get()) return;
+	if(f)
+	{
+		m_font.reset(f);
+		InvalidateRect(handle, 0, FALSE);
+	}
+	else
+	{
+		if(m_font)
+		m_font.reset(get_graphics()->get_system_font());
+	}
+}
+// Window
+
+// WindowedTimer
+windowed_timer::~windowed_timer()
+{
+	if(running)
+	{
+		KillTimer(owner, reinterpret_cast<UINT_PTR>(this));
+	}
+}
+
+void windowed_timer::create(HWND wind, const chrono::milliseconds& ticks)
+{
+	if(running)
+		throw logic_error("Timer already running");
+	if(!wind)
+		throw invalid_argument("Invalid handle");
+	owner = wind;
+	interval = ticks;
+	if(!SetTimer(wind, reinterpret_cast<UINT_PTR>(this), static_cast<UINT>(ticks.count()), timer_proc))
+		throw runtime_error("Unable to kill timer");
+	running = true;
+}
+
+void windowed_timer::kill()
+{
+	if(!running)
+		throw logic_error("Timer isn't running");
+	KillTimer(owner, reinterpret_cast<UINT_PTR>(this));
+	owner = 0;
+	running = false;
+}
+
+void CALLBACK windowed_timer::timer_proc(HWND hWnd, UINT msg, UINT_PTR event_id, DWORD time)
+{
+	if(msg == WM_TIMER)
+	{
+		windowed_timer* inst = reinterpret_cast<windowed_timer*>(event_id);
+		inst->tick();
+	}
+}
+// WindowedTimer
 
 };
 };
