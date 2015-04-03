@@ -36,7 +36,6 @@ public:
 	callback<void(const HWND)> handle_destroyed;
 
 	virtual int show(window* win = 0, bool use_handle = false);
-	// redraw -> überladung für i_drawsurface allein oder mit rectangle  
 	virtual void render(graphics* g);
 	virtual bool contains(const point& p) const;
 	bool flash(bool invert);
@@ -94,6 +93,7 @@ public:
 	font* get_font() const {return m_font.get();}
 	// Window deletes the font
 	void set_font(font* f);
+	dragdrop::drop_target* get_drop_target() {return &drop_handler;}
 private:
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	colour erase_colour;
@@ -113,10 +113,16 @@ private:
 	shared_ptr<font> m_font;
 	cursor_surface cur, surf_cur;
 	static bool queue_running;
+	dragdrop::drop_target drop_handler;
+	IDataObject* last_data_object;
 protected:
 	virtual LRESULT message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	virtual void on_create_params(unsigned long& style, unsigned long& exstyle, unsigned int& class_style, wstring& classname) {}
 	virtual void create_resources(graphics*);
+	virtual void on_drag_enter(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
+	virtual void on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
+	virtual void on_drag_leave();
+	virtual void on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
 	HWND handle;
 };
 

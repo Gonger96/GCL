@@ -7,7 +7,8 @@ namespace gcl { namespace std_renderer {
 gdiplus_font::gdiplus_font(const wstring& family_name, float size, int fstyle) : f(0), family(family_name), sz(size), style(fstyle), frm(new StringFormat())
 {
 	f = new Font(&FontFamily(family_name.c_str()), size, fstyle, UnitPixel);
-	if(!f->IsAvailable()) throw invalid_argument("Font is not available");
+	if(!f || !f->IsAvailable()) throw invalid_argument("Font is not available");
+	frm->SetFormatFlags(StringFormatFlagsMeasureTrailingSpaces);
 }
 
 gdiplus_font::~gdiplus_font()
@@ -28,9 +29,28 @@ rect gdiplus_font::get_metrics(const wstring& str, const size& clip, graphics* g
 	Graphics* g2 = dynamic_cast<gdiplus_renderer*>(g)->get_graphics();
 	if(!g2)
 		throw invalid_argument("Invalid graphics");
+	frm->SetFormatFlags(StringFormatFlagsMeasureTrailingSpaces);
 	Gdiplus::RectF rout;
 	g2->MeasureString(str.c_str(), str.length(), f, Gdiplus::RectF(0.f, 0.f, clip.width, clip.height), frm, &rout);
-	return rect(rout.X, rout.Y, rout.Width, rout.Height);
+	return rect(0, 0, rout.Width-(1.f/6.f)*sz, rout.Height);
+}
+
+vector<wstring> gdiplus_font::get_available_font_families()
+{
+	vector<wstring> coll;
+	InstalledFontCollection fc;
+	int cnt = fc.GetFamilyCount();
+	FontFamily* families = new FontFamily[cnt+1];
+	int found;
+	fc.GetFamilies(cnt, families, &found);
+	for(int i = 0; i <= cnt; ++i)
+	{
+		wchar_t str[LF_FACESIZE];
+		families[i].GetFamilyName(str);
+		coll.push_back(str);
+	}
+	delete[] families;
+	return move(coll);
 }
 // Font
 
@@ -444,6 +464,13 @@ gdiplus_renderer::gdiplus_renderer(texture* text) : tokens(0), g(0), buffered_co
 	create_resources();
 }
 
+void gdiplus_renderer::bind_dc(HDC dc)
+{
+	if(!dc)
+		throw invalid_argument("Empty DC");
+	context = dc;
+}
+
 void gdiplus_renderer::create_resources()
 {
 	if(is_start_up) return;
@@ -479,12 +506,11 @@ void gdiplus_renderer::begin()
 	else if(type == graphics_type::dc)
 	{
 		buffered_context = CreateCompatibleDC(context);
-		RECT rc = {};
-		GetWindowRect(handle, &rc);
-		size sz(static_cast<float>(rc.right - rc.left), static_cast<float>(rc.bottom-rc.top));
-		buffered_surface = CreateCompatibleBitmap(context, static_cast<int>(sz.width), static_cast<int>(sz.height));
+		RECT rc;
+		GetWindowRect(WindowFromDC(context), &rc);
+		buffered_surface = CreateCompatibleBitmap(context, rc.right-rc.left, rc.bottom-rc.top);
 		SelectObject(buffered_context, buffered_surface);
-		g = new Graphics(context);
+		g = new Graphics(buffered_context);
 		if(!g) throw runtime_error("Unable to create Graphics");
 	}
 	else if(type == graphics_type::texture)
@@ -522,10 +548,9 @@ void gdiplus_renderer::end()
 	}
 	else if(type == graphics_type::dc)
 	{
-		RECT rc = {};
-		GetWindowRect(handle, &rc);
-		size sz(static_cast<float>(rc.right - rc.left), static_cast<float>(rc.bottom-rc.top));
-		/*BitBlt(context, 0, 0, static_cast<int>(sz.width), static_cast<int>(sz.height), buffered_context, 0, 0, static_cast<DWORD>(raster_operations));*/
+		RECT rc;
+		GetWindowRect(WindowFromDC(context), &rc);
+		BitBlt(context, 0, 0, rc.right-rc.left, rc.bottom-rc.top, buffered_context, 0, 0, static_cast<DWORD>(raster_operations));
 		delete g;
 		g = 0;
 		DeleteObject(buffered_surface);
@@ -744,7 +769,13 @@ void gdiplus_renderer::pop_clip()
 	if(clips.size() == 0)
 		g->ResetClip();
 	else
+	{
+		//Matrix m;
+		//g->GetTransform(&m);
+		//g->SetTransform(&Matrix()); ???
 		g->SetClip(clips.top().get());
+		//g->SetTransform(&m);
+	}
 }
 
 //********************************************************************************************************************************************************************************************
@@ -881,6 +912,7 @@ void gdiplus_renderer::draw_string(const wstring& str, const point& origin, font
 		strFormat = StringFormatFlagsDirectionRightToLeft;
 	}
 	style->SetFormatFlags(strFormat);
+	style->SetLineAlignment(StringAlignmentNear);
 	style->SetAlignment(StringAlignmentNear);
 	g->DrawString(str.c_str(), static_cast<int>(str.length()), gdipFont->get_native_font(), PointF(origin.x, origin.y), style, get_brush(b));
 }
@@ -1080,7 +1112,8 @@ gdiplus_geometry::~gdiplus_geometry()
 
 void gdiplus_geometry::begin_geometry(const point& p)
 {
-	path = new GraphicsPath();
+	if(!path)
+		path = new GraphicsPath();
 	path->StartFigure();
 	path->AddLine(p.x, p.y, p.x, p.y);
 }

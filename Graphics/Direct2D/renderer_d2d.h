@@ -34,6 +34,7 @@ public:
 	bool operator==(font* f) {return (family == f->get_family() && sz == f->get_size() && style == f->get_style());}
 	IDWriteTextFormat* get_native_member() {return format;}
 	rect get_metrics(const wstring& str, const size& clip, graphics* g) const;
+	vector<wstring> get_available_font_families();
 private:
 	wstring family;
 	float sz;
@@ -271,11 +272,14 @@ class direct2d_renderer :
 public:
 	direct2d_renderer(HWND hWnd, callback<void(const size&, const resizing_types&)>& target_resize);
 	direct2d_renderer(direct2d_renderer* old_renderer, d2d_texture* text);
+	direct2d_renderer(HDC dc);
 	direct2d_renderer(const direct2d_renderer&) = delete;
+	ID2D1RenderTarget* get_current_target() const;
 	virtual ~direct2d_renderer();
 	void begin();
 	void clear(const colour& c);
 	void end();
+	void bind_dc(HDC dc);
 
 	void fill_rect(const rect& rc, brush* b);
 	void fill_rects(const rect* rcs, int count, brush* b);
@@ -324,6 +328,7 @@ public:
 	radial_gradient_brush* create_radial_gradient_brush(const ellipse& e, const gradient_stop& gradients, bool gamma);
 	graphics* create_graphics(HWND handle, callback<void(const size&, const resizing_types&)>& cb);
 	graphics* create_graphics(texture* txt);
+	graphics* create_graphics(HDC dc);
 	font* get_system_font(float sz, int fstyle) const;
 
 	void rotate(float angle);
@@ -349,13 +354,13 @@ private:
 	D2D1_RECT_F get_rect(const rect& rc);
 	D2D1_POINT_2F get_point(const point& p);
 	Matrix3x2F get_matrix(const matrix& m);
-	ID2D1RenderTarget* get_current_target() const;
 	graphics_type type;
 
 	static ID2D1Factory* factory;
 	static int inst_count;
 	ID2D1HwndRenderTarget* hwnd_render_target;
 	ID2D1BitmapRenderTarget* bmp_render_target;
+	ID2D1DCRenderTarget* dc_render_target;
 	d2d_texture* bmp;
 	static IWICImagingFactory* imgfactory;
 	static IDWriteFactory* write_factory;

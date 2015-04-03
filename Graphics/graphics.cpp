@@ -29,6 +29,11 @@ bool point::operator==(const point& p) const
 {
 	return p.x == x && p.y == y;
 }
+
+bool point::operator!=(const point& p) const
+{
+	return p.x != x || p.y != y;
+}
 // Point
 
 // Size
@@ -57,6 +62,11 @@ wstring size::to_wstring() const
 bool size::operator==(const size& sz) const
 {
 	return sz.height == height && sz.width == width;
+}
+
+bool size::operator!=(const size& sz) const
+{
+	return sz.height != height || sz.width != width;
 }
 
 size::size(const ui_metrics& m)
@@ -118,6 +128,11 @@ rect& rect::operator=(const rect& sz)
 bool rect::operator==(const rect& rc) const 
 {
 	return position == rc.position && sizef == rc.sizef;
+}
+
+bool rect::operator!=(const rect& rc) const 
+{
+	return position != rc.position || sizef != rc.sizef;
 }
 
 wstring rect::to_wstring() const
@@ -252,13 +267,38 @@ matrix matrix::operator*(const matrix& m)
 	float m22_ = m21*m.m12 + m22*m.m22; // + 0*m.m32 
 	float m31_ = m31*m.m11 + m32*m.m21 + m.m31;			//  1 0 /0
 	float m32_ = m31*m.m12 + m32*m.m22 + m.m32;			//  0 1 /0
-	m_.m11 = m11_;											//  0 0 /1
+	m_.m11 = m11_;										//  0 0 /1
 	m_.m12 = m12_;
 	m_.m21 = m21_;
 	m_.m22 = m22_;
 	m_.m31 = m31_;
 	m_.m32 = m32_;
 	return m_;
+}
+
+matrix matrix::operator*(float scalar)
+{
+	return matrix(m11*scalar, m12*scalar, m21*scalar, m22*scalar, m31*scalar, m32*scalar);
+}
+
+matrix matrix::operator/(const matrix& m)
+{
+	if(m.get_determinant() == 0)
+		throw logic_error("Matrix not invertible");
+	matrix ms = ~m;
+	return *(this)*ms;
+}
+
+matrix matrix::operator/(float scalar)
+{
+	return matrix(m11/scalar, m12/scalar, m21/scalar, m22/scalar, m31/scalar, m32/scalar);
+}
+
+matrix matrix::operator~() const
+{
+	matrix m1 = *this;
+	m1.invert();
+	return m1;
 }
 
 void matrix::transform_points(point* pts, unsigned int count) const
@@ -410,6 +450,432 @@ void matrix::mirror_y(float axis)
 }
 // Matrix
 
+// Clipboard
+void clipboard::clear()
+{
+	if(!EmptyClipboard())
+		throw runtime_error("unable to clear clipboard");
+}
+
+void clipboard::open(HWND wind)
+{
+	if(!OpenClipboard(wind))
+		throw runtime_error("Unable to open clipboard");
+}
+
+void clipboard::close()
+{
+	if(!CloseClipboard())
+		throw runtime_error("Unable to close clipboard");
+}
+
+HWND clipboard::get_owner()
+{
+	return GetClipboardOwner();
+}
+
+bool clipboard::is_format_available(UINT format)
+{
+	return !!IsClipboardFormatAvailable(format);
+}
+
+UINT clipboard::register_format(const wstring& str)
+{
+	UINT u = RegisterClipboardFormat(str.c_str());
+	if(u == 0)
+		throw runtime_error("Unable to register format");
+	return u;
+}
+
+clipboard::generic_data clipboard::get_data(UINT format)
+{
+	auto data = GetClipboardData(format);
+	if(!data)
+		throw runtime_error("Invalid data");
+	return data;
+}
+
+vector<UINT> clipboard::get_available_formats()
+{
+	unsigned current = 0;
+	vector<UINT> coll;
+	while(true)
+	{
+		current = EnumClipboardFormats(current);
+		if(current == 0)
+			break;
+		coll.push_back(current);
+	}
+	return move(coll);
+}
+
+void clipboard::set_data(UINT format, generic_data data)
+{
+	if(!SetClipboardData(format, data))
+		throw runtime_error("Unable to set clipboard data");
+}
+
+IDataObject* clipboard::ole_get_data()
+{
+	IDataObject* obj;
+	if(FAILED(OleGetClipboard(&obj)))
+		throw runtime_error("Unable to get clipboard data");
+	return obj;
+}
+
+void clipboard::ole_flush()
+{
+	OleFlushClipboard();
+}
+
+void clipboard::ole_set_data(IDataObject* data_object)
+{
+	if(FAILED(OleSetClipboard(data_object)))
+		throw runtime_error("Unable to set clipboard data");
+}
+// Clipboard
+
+// DragDrop
+namespace dragdrop {
+
+data_object::data_object(FORMATETC* fmt, STGMEDIUM* med, int cnt)
+{
+	ref_count = 1;
+	format_cnt = cnt;
+	formats = new FORMATETC[cnt];
+	mediums = new STGMEDIUM[cnt];
+	for(int i = 0; i < cnt; i++)
+	{
+		formats[i] = fmt[i];
+		mediums[i] = med[i];
+	}
+}
+
+data_object::~data_object()
+{
+	delete[] formats;
+	delete[] mediums;
+}
+
+HRESULT WINAPI data_object::GetData(FORMATETC* pFormatEtc, STGMEDIUM* pMedium)
+{
+	int idx = get_format_index(pFormatEtc);
+	if(idx == -1)
+		return DV_E_FORMATETC;
+	pMedium->tymed = formats[idx].tymed;
+	pMedium->pUnkForRelease = 0;
+	switch(formats[idx].tymed)
+	{
+	case TYMED_HGLOBAL:
+		{
+			void* hMem = mediums[idx].hGlobal;
+			DWORD len = GlobalSize(hMem);
+			void* source = GlobalLock(hMem);
+			void* dest = GlobalAlloc(GMEM_FIXED, len);
+			memcpy(dest, source, len);
+			GlobalUnlock(hMem);
+			pMedium->hGlobal = dest;
+			break;
+		}
+	case TYMED_ENHMF:
+		pMedium->hEnhMetaFile = CopyEnhMetaFile(mediums[idx].hEnhMetaFile, NULL);
+		break;
+	case TYMED_MFPICT:
+		pMedium->hMetaFilePict = mediums[idx].hMetaFilePict;
+		break;
+	case TYMED_GDI:
+		pMedium->hBitmap = mediums[idx].hBitmap;
+		break;
+	case TYMED_FILE:
+		{
+			void* hMem = mediums[idx].lpszFileName;
+			DWORD len = GlobalSize(hMem);
+			void* source = GlobalLock(hMem);
+			void* dest = GlobalAlloc(GMEM_FIXED, len);
+			memcpy(dest, source, len);
+			GlobalUnlock(hMem);
+			pMedium->lpszFileName = reinterpret_cast<wchar_t*>(dest);
+			break;
+		}
+	case TYMED_ISTORAGE:
+		pMedium->pstg = mediums[idx].pstg;
+		break;
+	case TYMED_ISTREAM:
+		pMedium->pstm = mediums[idx].pstm;
+		break;
+	default:
+		return DV_E_FORMATETC;
+	}
+	return S_OK;
+}
+
+HRESULT WINAPI data_object::GetDataHere(FORMATETC* pFormatEtc, STGMEDIUM* pMedium)
+{
+	return DATA_E_FORMATETC;
+}
+
+HRESULT WINAPI data_object::QueryGetData(FORMATETC* pFormatEtc)
+{
+	return (get_format_index(pFormatEtc) == -1) ? DV_E_FORMATETC : S_OK;
+}
+
+HRESULT WINAPI data_object::GetCanonicalFormatEtc(FORMATETC* pFormatEct, FORMATETC* pFormatEtcOut)
+{
+	pFormatEtcOut->ptd = NULL;
+	return E_NOTIMPL;
+}
+
+HRESULT WINAPI data_object::SetData(FORMATETC* pFormatEtc, STGMEDIUM* pMedium, BOOL fRelease)
+{
+	return E_NOTIMPL;
+}
+
+HRESULT WINAPI data_object::EnumFormatEtc(DWORD dwDirection, IEnumFORMATETC** ppEnumFormatEtc)
+{
+	if(dwDirection == DATADIR_GET)
+		return SHCreateStdEnumFmtEtc(format_cnt, formats, ppEnumFormatEtc);
+	else
+		return E_NOTIMPL;
+}
+
+HRESULT WINAPI data_object::DAdvise(FORMATETC* pFormatEtc, DWORD advf, IAdviseSink* pAdvSink, DWORD* pdwConnection)
+{
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+HRESULT WINAPI data_object::DUnadvise(DWORD dwConnection)
+{
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+HRESULT WINAPI data_object::EnumDAdvise(IEnumSTATDATA** ppEnumAdvise)
+{
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+HRESULT WINAPI data_object::QueryInterface(REFIID iid, void** ppvObject)
+{
+	if(iid == IID_IDataObject || iid == IID_IUnknown)
+	{
+		AddRef();
+		*ppvObject = this;
+		return S_OK;
+	}
+	else
+	{
+		*ppvObject = 0;
+		return E_NOINTERFACE;
+	}
+}
+
+ULONG WINAPI data_object::AddRef()
+{
+	return InterlockedIncrement(&ref_count);
+}
+
+ULONG WINAPI data_object::Release()
+{
+	LONG count = InterlockedDecrement(&ref_count);
+	if(count == 0)
+	{
+		delete this;
+		return 0;
+	}
+	else
+		return count;
+}
+
+int data_object::get_format_index(FORMATETC* frmt)
+{
+	for(int i = 0; i < format_cnt; ++i)
+	{
+		if(formats[i].cfFormat == frmt->cfFormat && formats[i].dwAspect == frmt->dwAspect && (formats[i].tymed & frmt->tymed))
+			return i;
+	}
+	return -1;
+}
+
+drop_target::drop_target(drawsurface* target)
+{
+	if(!target)
+		throw invalid_argument("Invalid window");
+	wnd = target;
+	ref_count = 1;
+	drop_helper = 0;
+}
+
+drop_target::~drop_target()
+{
+	if(drop_helper)
+		drop_helper->Release();
+}
+
+void drop_target::register_dragdrop()
+{
+	if(!wnd || !wnd->get_handle())
+		throw runtime_error("Invalid window");
+	if(FAILED(RegisterDragDrop(wnd->get_handle(), this)))
+		throw runtime_error("Registering DragDrop failed");
+}
+
+void drop_target::deregister_dragdrop()
+{
+	if(!wnd || !wnd->get_handle())
+		throw runtime_error("Invalid window");
+	if(FAILED(RevokeDragDrop(wnd->get_handle())))
+		throw runtime_error("Unregistering DragDrop failed");
+}
+
+void drop_target::register_helper()
+{
+	if(FAILED(CoCreateInstance(CLSID_DragDropHelper, NULL, CLSCTX_INPROC_SERVER, IID_IDropTargetHelper, (void**)&drop_helper)))
+		throw runtime_error("Unable to create DropTargetHelper");
+}
+
+void drop_target::deregister_helper()
+{
+	if(!drop_helper)
+		return;
+	drop_helper->Release();
+	drop_helper = 0;
+}
+
+HRESULT WINAPI drop_target::QueryInterface(REFIID iid, void** ppvObject)
+{
+	if(iid == IID_IDropTarget || iid == IID_IUnknown)
+	{
+		AddRef();
+		*ppvObject = this;
+		return S_OK;
+	}
+	else
+	{
+		*ppvObject = 0;
+		return E_NOINTERFACE;
+	}
+}
+
+ULONG WINAPI drop_target::AddRef()
+{
+	return InterlockedIncrement(&ref_count);
+}
+
+ULONG WINAPI drop_target::Release()
+{
+	return InterlockedDecrement(&ref_count);
+}
+
+HRESULT WINAPI drop_target::DragEnter(IDataObject* pDataObject, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+	drop_effects effect = drop_effects::none;
+	wnd->on_drag_enter(pDataObject, grfKeyState, point(static_cast<float>(pt.x), static_cast<float>(pt.y)), &effect);
+	*pdwEffect = static_cast<DWORD>(effect);
+	if(drop_helper)
+	{
+		POINT p = {pt.x, pt.y};
+		drop_helper->DragEnter(wnd->get_handle(), pDataObject, &p, *pdwEffect);
+	}
+	return S_OK;
+}
+
+HRESULT WINAPI drop_target::DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+	drop_effects effect = drop_effects::none;
+	wnd->on_drag_over(grfKeyState, point(static_cast<float>(pt.x), static_cast<float>(pt.y)), &effect);
+	*pdwEffect = static_cast<DWORD>(effect);
+	if(drop_helper)
+	{
+		POINT p = {pt.x, pt.y};
+		drop_helper->DragOver(&p, *pdwEffect);
+	}
+	return S_OK;
+}
+
+HRESULT WINAPI drop_target::DragLeave()
+{
+	wnd->on_drag_leave();
+	if(drop_helper)
+		drop_helper->DragLeave();
+	return S_OK;
+}
+
+HRESULT WINAPI drop_target::Drop(IDataObject* pDataObject, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+{
+	drop_effects effect = drop_effects::none;
+	wnd->on_drop(pDataObject, grfKeyState, point(static_cast<float>(pt.x), static_cast<float>(pt.y)), &effect);
+	*pdwEffect = static_cast<DWORD>(effect);
+	if(drop_helper)
+	{
+		POINT p = {pt.x, pt.y};
+		drop_helper->Drop(pDataObject, &p, *pdwEffect);
+	}
+	return S_OK;
+}
+
+drop_source::drop_source()
+{
+	ref_count = 1;
+}
+
+HRESULT WINAPI drop_source::QueryInterface(REFIID iid, void** ppvObject)
+{
+	if(iid == IID_IDropSource || iid == IID_IUnknown)
+	{
+		AddRef();
+		*ppvObject = this;
+		return S_OK;
+	}
+	else
+	{
+		*ppvObject = 0;
+		return E_NOINTERFACE;
+	}
+}
+
+ULONG WINAPI drop_source::AddRef()
+{
+	return InterlockedIncrement(&ref_count);
+}
+
+ULONG WINAPI drop_source::Release()
+{
+	return InterlockedDecrement(&ref_count);
+}
+
+HRESULT WINAPI drop_source::QueryContinueDrag (BOOL fEscapePressed, DWORD grfKeyState)
+{
+	if(fEscapePressed == TRUE)
+		return DRAGDROP_S_CANCEL;
+	if((grfKeyState & MK_LBUTTON) == 0)
+		return DRAGDROP_S_DROP;
+	return S_OK;
+}
+
+HRESULT WINAPI drop_source::GiveFeedback(DWORD dwEffect)
+{
+	return DRAGDROP_S_USEDEFAULTCURSORS;
+}
+
+drop_effects get_effect_from_keys(DWORD keystate)
+{
+	if(((keystate & MK_ALT) == MK_ALT) || (((keystate & MK_SHIFT) == MK_SHIFT) && ((keystate & MK_CONTROL) == MK_CONTROL)))
+		return drop_effects::link;
+	else if((keystate & MK_CONTROL) == MK_CONTROL)
+		return drop_effects::copy;
+	else
+		return drop_effects::move;
+}
+
+HGLOBAL data_to_global(const void* src, size_t len)
+{
+	void* dest = GlobalAlloc(GMEM_FIXED, len);
+	memcpy(dest, src, len);
+	return dest;
+}
+
+};
+// DragDrop
+
 namespace render_objects {
 
 // Icon
@@ -540,6 +1006,7 @@ void _cl_hlp::on_up(const mouse_buttons& b, const int modifier, const point& pos
 dynamic_drawsurface::dynamic_drawsurface() : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mover)
 {
 	owner = 0;
+	key_capture = mouse_capture = false;
 	vert_align = vertical_align::top;
 	hor_align = horizontal_align::left;
 	hs_resources = false;
@@ -563,7 +1030,9 @@ dynamic_drawsurface::dynamic_drawsurface() : _cl_hlp(mouse_click, mouse_down, mo
 	m_font = 0;
 	tabidx = 0;
 	tabstop = true;
+	tab_capture = false;
 	clip_childs = true;
+	is_drop_entered = false;
 }
 
 dynamic_drawsurface::~dynamic_drawsurface() 
@@ -641,6 +1110,8 @@ void dynamic_drawsurface::set_min_size(const size& s)
 {
 	if(minsize == s) return;
 	minsize = s;
+	minsize.width = max(minsize.width, 1.f);
+	minsize.height = max(minsize.height, 1.f);
 	min_size_changed(s);
 	if(sizef.height < s.height)
 		set_size(size(sizef.width, s.height), false);
@@ -654,6 +1125,8 @@ void dynamic_drawsurface::set_max_size(const size& s)
 {
 	if(maxsize == s) return;
 	maxsize = s;
+	maxsize.width = max(maxsize.width, 1.f);
+	maxsize.height = max(maxsize.height, 1.f);
 	max_size_changed(s);
 	if(sizef.height > s.height)
 		set_size(size(sizef.width, s.height), false);
@@ -711,6 +1184,8 @@ void dynamic_drawsurface::on_menu_opening()
 
 bool dynamic_drawsurface::on_tab_pressed() // Returns wether the parent has to select the child or not
 {
+	if(tab_capture)
+		return false;
 	bool risen = false;
 	auto surf = get_focused_surface();
 	if(surf) // Already 1 selected
@@ -777,6 +1252,90 @@ bool dynamic_drawsurface::on_tab_pressed() // Returns wether the parent has to s
 			return false;
 		}
 	}
+}
+
+void dynamic_drawsurface::on_drag_enter(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), owner->get_handle(), &pn, 1);
+	last_data_object = data_object;
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available())
+		{
+			surf->on_drag_enter(data_object, keystate, pt, effect);
+			surf->is_drop_entered = true;
+			risen = true;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drag_enter(data_object, keystate, pt, effect);
+}
+
+void dynamic_drawsurface::on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), owner->get_handle(), &pn, 1);
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available() && surf->is_drop_entered)
+		{
+			surf->on_drag_over(keystate, pt, effect);
+			risen = true;
+		}
+		else if(surf->contains(p) && surf->is_available() && !surf->is_drop_entered)
+		{
+			surf->on_drag_enter(last_data_object, keystate, pt, effect);
+			surf->is_drop_entered = true;
+		}
+		else if(surf->is_drop_entered && !surf->contains(p))
+		{
+			surf->on_drag_leave();
+			surf->is_drop_entered = false;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drag_over(keystate, pt, effect);
+}
+
+void dynamic_drawsurface::on_drag_leave()
+{
+	for(auto surf : surfaces)
+	{
+		if(surf->is_drop_entered)
+		{
+			surf->on_drag_leave();
+			surf->is_drop_entered = false;
+		}
+	}
+	if(get_enable_dragdrop())
+		drag_leave();
+}
+
+void dynamic_drawsurface::on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), owner->get_handle(), &pn, 1);
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available() && surf->is_drop_entered/* && surf->get_enable_dragdrop()*/)
+		{
+			surf->on_drop(data_object, keystate, pt, effect);
+			surf->is_drop_entered = false;
+			risen = true;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drop(data_object, keystate, pt, effect);
 }
 
 void dynamic_drawsurface::set_focus(bool b) 
@@ -911,6 +1470,7 @@ void dynamic_drawsurface::layout()
 
 void dynamic_drawsurface::create_resources(render_objects::graphics* g) 
 {
+	if(hs_resources) return;
 	if(!is_rectangular())
 	{
 		geo = shared_ptr<render_objects::geometry>(g->create_geometry());
@@ -946,6 +1506,7 @@ void dynamic_drawsurface::set_owner(drawsurface* ownr)
 	if(owner)
 		owner->remove_surface(this);
 	owner = ownr;
+	owner_changed(ownr);
 	if(owner)
 	{
 		if(!parent)owner->add_surface(this);
@@ -974,6 +1535,8 @@ void dynamic_drawsurface::set_enabled(bool b)
 {
 	if(!change_if_diff(enabled, b)) return;
 	enabled_changed(b);
+	if(!b)
+		set_focus(false);
 	if(owner)owner->redraw(get_bounds());
 }
 
@@ -1274,7 +1837,7 @@ void dynamic_drawsurface::on_syskey_up(const virtual_keys& key, const key_extend
 		syskey_up(key, params);
 }
 
-void dynamic_drawsurface::on_char_sent(char c, const key_extended_params& params)
+void dynamic_drawsurface::on_char_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
 	for(auto& surf : surfaces)
@@ -1290,7 +1853,7 @@ void dynamic_drawsurface::on_char_sent(char c, const key_extended_params& params
 		char_sent(c, params);
 }
 
-void dynamic_drawsurface::on_deadchar_sent(char c, const key_extended_params& params)
+void dynamic_drawsurface::on_deadchar_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
 	for(auto& surf : surfaces)
@@ -1304,6 +1867,38 @@ void dynamic_drawsurface::on_deadchar_sent(char c, const key_extended_params& pa
 	}
 	if(!risen)
 		deadchar_sent(c, params);
+}
+
+void dynamic_drawsurface::on_syschar_sent(wchar_t c, const key_extended_params& params)
+{
+	bool risen = false;
+	for(auto& surf : surfaces)
+	{
+		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+		{
+			if(surf->get_enabled())
+				surf->on_syschar_sent(c, params);
+			risen = true;
+		}
+	}
+	if(!risen)
+		syschar_sent(c, params);
+}
+
+void dynamic_drawsurface::on_sysdeadchar_sent(wchar_t c, const key_extended_params& params)
+{
+	bool risen = false;
+	for(auto& surf : surfaces)
+	{
+		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+		{
+			if(surf->get_enabled())
+				surf->on_sysdeadchar_sent(c, params);
+			risen = true;
+		}
+	}
+	if(!risen)
+		sysdeadchar_sent(c, params);
 }
 
 void dynamic_drawsurface::set_cursor(const render_objects::cursor_surface& cur_s)
@@ -1419,7 +2014,6 @@ menu_strip::menu_strip()
 	arrow_size = 5.f;
 	cl_back = colour::black;
 	child_shown = false;
-	hs_resources = false;
 }
 
 menu_strip::~menu_strip()
@@ -1511,6 +2105,7 @@ void menu_strip::show(const point& p, bool key)
 		SetWindowPos(handle, 0, static_cast<int>(p.x), static_cast<int>(p.y-currheight-4.f), static_cast<int>(currwidth+arrow_size*3), static_cast<int>(currheight+4.f), SWP_NOZORDER);
 	else
 		SetWindowPos(handle, 0, static_cast<int>(p.x), static_cast<int>(p.y), static_cast<int>(currwidth+arrow_size*3), static_cast<int>(currheight+4.f), SWP_NOZORDER);
+	shown(p);
 	ShowWindow(handle, SW_SHOW);
 	UpdateWindow(handle);
 }
@@ -1759,7 +2354,7 @@ LRESULT menu_strip::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 				{
 					if(strip->get_checkable())
 						strip->set_checked(!strip->get_checked());
-					strip->click(static_cast<const int>(wParam));
+					strip->click(i);
 					risen = true;
 					if(strip->hs_childs)
 					{
@@ -1841,7 +2436,7 @@ LRESULT menu_strip::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 					auto strip = childs[hidx];
 					if(strip->get_checkable())
 						strip->set_checked(!strip->get_checked());
-					strip->click(static_cast<const int>(wParam));
+					strip->click(hidx);
 					if(!strip->hs_childs)
 					{
 						close(true);
@@ -1972,6 +2567,7 @@ context_menu::context_menu(HWND owner_, render_objects::graphics* owner_graphics
 	window_graphics.reset(owner_graphics->create_graphics(handle, size_changed));
 	window_graphics->set_antialias(true);
 	title_font = shared_ptr<render_objects::font>(window_graphics->get_system_font());
+	cl_back = colour::gcl_dark_gray;
 	if(is_high_contrast())
 	{
 		cl_hi = colour::menu_text;
@@ -1982,7 +2578,7 @@ context_menu::context_menu(HWND owner_, render_objects::graphics* owner_graphics
 	{
 		cl_hi = colour::white;
 		cl_gray = colour::gray;
-		cl_hot = colour::gcl_menu_gray;
+		cl_hot = colour::gcl_gray;
 	}
 	highlight_brush = shared_ptr<render_objects::solid_brush>(window_graphics->create_solid_brush(cl_hi));
 	grayed_brush = shared_ptr<solid_brush>(window_graphics->create_solid_brush(cl_gray));
@@ -2018,6 +2614,13 @@ void context_menu::remove_strip(menu_strip* strip)
 		redraw();
 }
 
+void context_menu::clear_strips()
+{
+	childs.clear();
+	if(handle)
+		redraw();
+}
+
 bool context_menu::test_handle(HWND hWnd)
 {
 	if(handle == hWnd)
@@ -2030,7 +2633,7 @@ bool context_menu::test_handle(HWND hWnd)
 	return false;
 }
 
-void context_menu::show(const point& p)
+void context_menu::show(const point& p, int custom_width)
 {
 	float img_size = render_objects::icon::get_small_icon_size().width;
 	float currheight = 0, currwidth = img_size+16.f;
@@ -2040,6 +2643,8 @@ void context_menu::show(const point& p)
 		currwidth = max(currwidth, title_font->get_metrics(ch->get_title(), size(static_cast<float>(GetSystemMetrics(SM_CXMAXTRACK)), static_cast<float>(GetSystemMetrics(SM_CYMAXTRACK))), window_graphics.get()).get_width() + img_size+16.f);
 		currheight += ch->get_height()+4.f;
 	}
+	if(custom_width > 0 && (custom_width-child_arrow*3) > currwidth)
+		currwidth = custom_width-child_arrow*3;
 	window_graphics->end();
 	RECT rc;
 	GetClientRect(GetDesktopWindow(), &rc);
@@ -2047,6 +2652,7 @@ void context_menu::show(const point& p)
 		SetWindowPos(handle, 0, static_cast<int>(p.x), static_cast<int>(p.y-currheight-4.f), static_cast<int>(currwidth+child_arrow*3), static_cast<int>(currheight+4.f), SWP_NOZORDER);
 	else
 		SetWindowPos(handle, 0, static_cast<int>(p.x), static_cast<int>(p.y), static_cast<int>(currwidth+child_arrow*3), static_cast<int>(currheight+4.f), SWP_NOZORDER);
+	shown(p);
 	ShowWindow(handle, SW_SHOW);
 	UpdateWindow(handle);
 }
@@ -2182,7 +2788,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 				{
 					if(strip->get_checkable())
 						strip->set_checked(!strip->get_checked());
-					strip->click(static_cast<const int>(wParam));
+					strip->click(i);
 					risen = true;
 					if(strip->hs_childs)
 					{
@@ -2250,7 +2856,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 					auto strip = childs[hidx];
 					if(strip->get_checkable())
 						strip->set_checked(!strip->get_checked());
-					strip->click(static_cast<const int>(wParam));
+					strip->click(hidx);
 					if(!strip->hs_childs)
 					{
 						close(true);
@@ -2290,6 +2896,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 		break;
 	case WM_CLOSE:
 		DestroyWindow(hWnd);
+		closed();
 		UnregisterClass(classname.c_str(), GetModuleHandle(0));
 		break;
 	default:
@@ -2306,6 +2913,7 @@ void context_menu::close(bool parent)
 		childs[showed_idx]->close(true);
 		child_shown = false;
 	}
+	closed();
 }
 
 LRESULT CALLBACK context_menu::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)

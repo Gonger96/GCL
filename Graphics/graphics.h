@@ -21,6 +21,8 @@ namespace gcl {
 namespace ui {class window;};
 struct matrix;
 
+static const float horizontal_leave_offset = 100, vertical_leave_offset = 100;
+
 template <typename _src, typename _dst>
 bool is_type(_src* source) {return (dynamic_cast<_dst*>(source) != 0);};
 template <typename t>
@@ -65,6 +67,12 @@ const t& extend(const t& value, const t& min, const t& max)
 	return value;
 }
 
+template <typename func1, typename cl, typename func, typename ret, typename... args>
+unsigned gcl_add_binding(cl* ptr, func fn_source, callback<ret(args...)>& callback_dest)
+{
+	callback_dest += gcl_bind<args...>(static_cast<func1*>(fn_source), ptr, placeholder::_1);
+	return callback_dest.size();
+}
 
 // Defines a coordinate in 2D space
 struct point
@@ -82,6 +90,7 @@ public:
 		return stream;
 	}
 	bool operator==(const point& p) const;
+	bool operator!=(const point& p) const;
 };
 
 enum class ui_metrics {window_border = SM_CXBORDER, cursor = SM_CXCURSOR, dialog_frame = SM_CXDLGFRAME, window_3d_edge = SM_CXEDGE, window_fixed_border = SM_CXFIXEDFRAME, window_maximized = SM_CXMAXIMIZED, window_max = SM_CXMAXTRACK, 
@@ -105,6 +114,7 @@ public:
 		return stream;
 	}
 	bool operator==(const size& sz) const;
+	bool operator!=(const size& sz) const;
 };
 
 template <typename t>
@@ -138,6 +148,7 @@ public:
 	inline float get_bottom() const {return position.y+sizef.height;}
 	rect& operator= (const rect& sz);
 	bool operator== (const rect& rc) const;
+	bool operator!=(const rect& rc) const;
 	wstring to_wstring() const;
 	friend wostream& operator<<(wostream& stream, const rect& rc)
 	{
@@ -218,6 +229,7 @@ public:
         fuchsia = 0xFF00FF,
         gainsboro = 0xDCDCDC,
 		gcl_gray = 0x3e3e42,
+		gcl_back = 0x373738,
 		gcl_menu_gray = 0x333333,
 		gcl_dark_gray = 0x252526,
 		gcl_front_gray = 0x686868,
@@ -456,7 +468,11 @@ public:
 
 	bool operator==(const matrix& m) const;
 	bool operator!=(const matrix& m) const;
+	matrix operator~() const;
 	matrix operator*(const matrix& m);
+	matrix operator*(float scalar);
+	matrix operator/(const matrix& m);
+	matrix operator/(float scalar);
 	void transform_points(point* pts, unsigned int count = 1) const;
 	const void transform_vectors(point* pts, unsigned int count = 1) const;
 	void invert();
@@ -486,6 +502,31 @@ private:
 	inline float determinant(float m_11, float m_12, float m_21, float m_22) {return m_11*m_22 - m_12*m_21;}
 };
 
+namespace clipboard
+{
+	typedef HANDLE generic_data;
+	void clear();
+	void open(HWND wind);
+	void close();
+	HWND get_owner();
+	bool is_format_available(UINT format);
+	generic_data get_data(UINT format);
+	UINT register_format(const wstring& frmt);
+	template <typename dest>
+	dest get_data(UINT format)
+	{
+		auto data = GetClipboardData(format);
+		if(!data)
+			throw runtime_error("Invalid data");
+		return reinterpret_cast<dest>(data);
+	}
+	vector<UINT> get_available_formats();
+	void set_data(UINT format, generic_data data);
+	IDataObject* ole_get_data();
+	void ole_set_data(IDataObject* data_object);
+	void ole_flush();
+};
+
 enum class resizing_types {max_hide = SIZE_MAXHIDE, maximized = SIZE_MAXIMIZED, max_show = SIZE_MAXSHOW, minimized = SIZE_MINIMIZED, restored = SIZE_RESTORED};
 
 namespace render_objects {
@@ -511,30 +552,22 @@ class font
 {
 public:
 	virtual ~font() {};
-	// Returns the current Style (see namespace font_style)
 	virtual int get_style() const = 0;
-	// Returns the current size in pixels
 	virtual float get_size() const = 0;
-	// Returns the current familyname
 	virtual wstring get_family() const = 0;
 	virtual bool operator==(font* f) = 0;
 	virtual rect get_metrics(const wstring& str, const size& clip, graphics* g) const = 0;
+	virtual vector<wstring> get_available_font_families() = 0;
 };
 
 class texture
 {
 public:
 	virtual ~texture() {};
-	// Returns the horizontal resolution of the texture
 	virtual int get_width() const = 0;
-	// Returns the vertical resolution of the texture
 	virtual int get_height() const = 0;
-	// Clones the whole texture
-	virtual texture* clone() = 0; 
-
-	// Locks the Imagedata in Memory (Format: PBGRA - 32 Bits per pixel)
+	virtual texture* clone() = 0;
 	virtual unsigned char* alloc() = 0;
-	// frees the Imagedata
 	virtual void free() = 0;
 	// Returns the stride (Width*BitsPerpixel) after the texture has been locked
 	virtual int get_stride() = 0;
@@ -550,13 +583,9 @@ class icon
 {
 public:
 	virtual ~icon() {};
-	// Returns the internal inconhandle
 	virtual HICON get_icon() const = 0;
-	// Returns the size
 	virtual size get_size() const = 0;
-	// Returns the standard size of a small icon
 	static size get_small_icon_size();
-	// Returns the standard size of an icon
 	static size get_icon_size();
 };
 
@@ -584,15 +613,10 @@ class brush
 public:
 	brush() {};
 	virtual ~brush() {};
-	// Yields the current brushtype
 	virtual brush_types get_type() = 0;
-	// Transforms the brush
 	virtual void set_transform(const matrix& m) = 0;
-	// Yields the current transformation
 	virtual matrix get_transform() const = 0;
-	// Returns the current opacity
 	virtual float get_opacity() const = 0;
-	// Sets the opacity in percent
 	virtual void set_opacity(float val) = 0;
 };
 
@@ -601,9 +625,7 @@ class solid_brush :
 {
 public:
 	virtual ~solid_brush() {};
-	// Returns the colour
 	virtual colour get_colour() = 0;
-	// Sets the colour
 	virtual void set_colour(const colour& c) = 0;
 	virtual void set_transform(const matrix& m) {};
 	virtual matrix get_transform() const {return matrix::identity();};
@@ -614,11 +636,8 @@ class texture_brush :
 {
 public:
 	virtual ~texture_brush() {};
-	// Yields the texture of the brush
 	virtual texture* get_texture() const = 0;
-	// Sets the edge/border wrapmode
 	virtual void set_wrap_mode(const wrap_modes& mode) = 0;
-	// Yields the wrapmode
 	virtual wrap_modes get_wrap_mode() const = 0;
 };
 
@@ -649,11 +668,8 @@ class linear_gradient_brush :
 {
 public:
 	virtual ~linear_gradient_brush() {};
-	// Sets the start- and destinationpoint of the gradientfield
 	virtual void set_rect(const point& p1, const point& p2) = 0;
-	// Sets the rectangle of the gradientfield
 	virtual void set_rect(const rect& rc) {set_rect(rc.position, rc.sizef.to_point());};
-	// Yields the rectangle of the gradientfield
 	virtual rect get_rect() const = 0;
 	virtual gradient_stop get_gradients() const = 0;
 	virtual void set_gradients(gradient_stop& gradients) = 0;
@@ -702,7 +718,7 @@ public:
 	virtual bool contains(const point& p, const matrix& m = matrix::identity()) = 0; 
 	virtual bool outline_contains(const point& p, pen* pe, const matrix& m = matrix::identity()) = 0;
 
-	virtual void add_polygon(const point* ps, int count) = 0; // Neu
+	virtual void add_polygon(const point* ps, int count) = 0;
 	virtual void add_bezier(const point& p1, const point& p2, const point& p3) = 0;
 	virtual void add_beziers(const point* ps, int count) = 0;
 	//virtual void add_curve(const point* ps, int count, float tension) = 0;
@@ -711,7 +727,7 @@ public:
 	virtual void add_rect(const rect& rc) = 0;
 	virtual void add_ellipse(const ellipse& e) = 0;
 	virtual void add_rounded_rect(const rect& rc, float radiusX, float radiusY) = 0;
-	virtual void add_geometry(geometry* geo) = 0; // Neu
+	virtual void add_geometry(geometry* geo) = 0;
 	virtual rect get_bounds(const matrix& transform) const = 0;
 };
 
@@ -742,6 +758,7 @@ public:
 	virtual void begin() = 0;
 	virtual void clear(const colour& c)= 0;
 	virtual void end() = 0;
+	virtual void bind_dc(HDC dc) = 0;
 
 	virtual void fill_rect(const rect& rc, brush* b) = 0;
 	virtual void fill_rects(const rect* rcs, int count, brush* b) = 0;
@@ -757,7 +774,7 @@ public:
 	virtual void draw_rect(const rect rc, pen* p) = 0;
 	virtual void draw_rects(const rect* rcs, int count, pen* p) = 0;
 	virtual void draw_rounded_rect(const rect& rc, float radiusx, float radiusy, pen* p) = 0;
-	virtual void draw_polygon(const point* ps, int count, pen* p) = 0; // Neu
+	virtual void draw_polygon(const point* ps, int count, pen* p) = 0;
 	virtual void draw_geometry(geometry* geo, pen* p) = 0;
 	virtual void draw_string(const wstring& str, const point& origin, font* fn, brush* b, const string_format& format = string_format::direction_left_to_right) = 0;
 	virtual void draw_string(const wstring& str, const rect& cliprc, font* fn, brush* b, const string_format& format = string_format::direction_left_to_right, const horizontal_string_align& cliping_h = horizontal_string_align::left, const vertical_string_align& clipping_v = vertical_string_align::top) = 0;
@@ -791,9 +808,10 @@ public:
 	virtual radial_gradient_brush* create_radial_gradient_brush(const ellipse& e, const gradient_stop& gradients, bool gamma = false) = 0;
 	virtual font* get_system_font(float sz = 12.66f, int fstyle = font_style::regular) const = 0;
 	virtual graphics* create_graphics(HWND handle, callback<void(const size&, const resizing_types&)>& cb) = 0;
-	//virtual graphics* create_graphics(HDC dc) = 0;
+	// Region does not get deleted
+	virtual graphics* create_graphics(HDC dc) = 0;
 	virtual graphics* create_graphics(texture* txt) = 0;
-	
+
 	virtual void rotate(float angle) = 0;
 	virtual void rotate_at(float angle, const point& p) = 0;
 	virtual void translate(float x, float y) = 0;
@@ -1042,6 +1060,8 @@ struct key_extended_params
 // Layout enums and references
 enum class horizontal_align {left, center, right, stretch};
 enum class vertical_align {top, center, bottom, stretch};
+enum class horizontal_scroll_align {top, bottom};
+enum class vertical_scroll_align {left, right};
 enum class drawing_state {normal, pressed, hot};
 //
 
@@ -1090,10 +1110,6 @@ protected:
 	shared_ptr<graphics> window_graphics;
 };
 
-// create_resources aufrufen vom parent;
-// void init(graphics*) hinzufügen
-// Farben: MenuText, GrayText, Highlight
-// Standard GCLFarben in knowncolour auslagern!
 class menu_strip :
 	public menu_graphics
 {
@@ -1101,14 +1117,16 @@ friend class context_menu;
 public:
 	menu_strip();
 	virtual ~menu_strip();
+	// void(int index)
 	callback<void(int)> click;
+	callback<void(const point&)> shown;
 	callback<void(const size&, const resizing_types&)> size_changed;
 	virtual void render(graphics* g, drawing_state draw_state, const point& origin);
 
 	// Call init() to initialize the menu_strip if it'll have childs
 	void init(menu_graphics* parent);
-	void set_height(float v); // ############## Gucken was bei zu großem Font machen get_height
-	float get_height() const {return max(height, icon::get_small_icon_size().height+4);} // 4: 2 space top, 2 space bottom
+	void set_height(float v);
+	float get_height() const {return max(height, icon::get_small_icon_size().height+4);}
 	void set_checked(bool b);
 	bool get_checked() const {return checked;}
 	void set_checkable(bool b);
@@ -1130,6 +1148,9 @@ public:
 	HWND get_owner() const {return p ? p->get_owner() : 0;}
 	bool is_focused() const {return focus;}
 	menu_graphics* get_parent() const {return p;}
+	menu_strip* get_strip(int index) {return childs[index];}
+	menu_strip* operator[](int idx) {return childs[idx];}
+	int get_strip_count() const {return childs.size();}
 protected:
 	menu_graphics* get_owning_window() const {return p;}
 	bool test_handle(HWND) const;
@@ -1170,13 +1191,19 @@ public:
 	context_menu(HWND owner, graphics* owner_graphics);
 	virtual ~context_menu();
 	callback<void(const size&, const resizing_types&)> size_changed;
+	callback<void(const point&)> shown;
+	callback<void()> closed;
 
-	virtual void show(const point& p);
+	virtual void show(const point& p, int custom_width = 0); 
 	virtual void render(graphics* g);
 	void redraw(rect rc);
 	void redraw();
 	void add_strip(menu_strip* strip);
 	void remove_strip(menu_strip* strip);
+	void clear_strips();
+	menu_strip* get_strip(int index) {return childs[index];}
+	menu_strip* operator[](int idx) {return childs[idx];}
+	int get_strip_count() const {return childs.size();}
 	size get_size() const;
 	HWND get_handle() {return handle;}
 	void close(bool parent);
@@ -1198,12 +1225,16 @@ private:
 	unsigned showed_idx;
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 };
+
 };
+
+namespace dragdrop {class drop_target; enum class drop_effects : DWORD {none = DROPEFFECT_NONE, copy = DROPEFFECT_COPY, move = DROPEFFECT_MOVE, link = DROPEFFECT_LINK, scroll = DROPEFFECT_SCROLL};};
 
 class drawsurface
 {
+friend class dragdrop::drop_target;
 public:
-	drawsurface() : visible(true) {};
+	drawsurface() : visible(true), _dragdrop(false) {};
 	virtual ~drawsurface() {};
 	callback<void(const wstring&)> title_changed;
 	callback<void(const dynamic_drawsurface*)> surface_added;
@@ -1220,13 +1251,18 @@ public:
 	callback<void(const point&)> mouse_enter, mouse_leave;
 	callback<void(bool)> enabled_changed;
 	callback<void(float)> opacity_changed;
-	// Raised when the User rotates the mousewheel. (Modifierkeys, Cursorposition, Delta)
+	// Raises when the User rotates the mousewheel. (Modifierkeys, Cursorposition, Delta)
 	callback<void(const int, const point&, int)> mouse_wheel, mouse_h_wheel;
 	callback<void(bool)> focus_changed;
 	callback<void()> syscolour_changed;
 	callback<void(const virtual_keys&, const key_extended_params&)> key_down, key_up; 
 	callback<void(const virtual_keys&, const key_extended_params&)> syskey_down, syskey_up; 
-	callback<void(char, const key_extended_params&)> char_sent, deadchar_sent;
+	callback<void(wchar_t, const key_extended_params&)> char_sent, deadchar_sent, syschar_sent, sysdeadchar_sent;
+	// Dragdrop
+	callback<void(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)> drag_enter;
+	callback<void(DWORD keystate, const point& pt, dragdrop::drop_effects* effect)> drag_over;
+	callback<void()> drag_leave;
+	callback<void(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)> drop;
 
 	virtual void render(render_objects::graphics* g)  = 0;
 	virtual bool contains(const point& p) const = 0;
@@ -1260,8 +1296,13 @@ public:
 	virtual void layout() = 0;
 	virtual HWND get_handle() const = 0;
 	virtual render_objects::font* get_font() const = 0;
+	virtual bool get_enable_dragdrop() const {return _dragdrop;}
+	virtual void set_enable_dragdrop(bool b) {_dragdrop = b;}
+	virtual list<dynamic_drawsurface*>::const_iterator get_children_begin() {return surfaces.cbegin();}
+	virtual list<dynamic_drawsurface*>::const_iterator get_children_end() {return surfaces.cend();}
 protected:
 	bool visible;
+	bool _dragdrop;
 	bool enabled;
 	wstring title;
 	point position;
@@ -1271,6 +1312,89 @@ protected:
 	virtual void create_resources(render_objects::graphics*) = 0;
 	padding pddng;
 	list<dynamic_drawsurface*> surfaces;
+
+	virtual void on_drag_enter(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect) = 0;
+	virtual void on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect) = 0;
+	virtual void on_drag_leave() = 0;
+	virtual void on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect) = 0;
+};
+
+namespace dragdrop
+{
+	class data_object :
+		public IDataObject
+	{
+	public:
+		static IDataObject* create_data_object(FORMATETC* fmt, STGMEDIUM* med, int cnt) {return new data_object(fmt, med, cnt);}
+		~data_object();
+		HRESULT WINAPI GetData(FORMATETC* pFormatEtc, STGMEDIUM* pMedium);
+		HRESULT WINAPI GetDataHere(FORMATETC* pFormatEtc, STGMEDIUM* pMedium);
+		HRESULT WINAPI QueryGetData(FORMATETC* pFormatEtc);
+		HRESULT WINAPI GetCanonicalFormatEtc(FORMATETC* pFormatEct, FORMATETC* pFormatEtcOut);
+		HRESULT WINAPI SetData(FORMATETC* pFormatEtc, STGMEDIUM* pMedium, BOOL fRelease);
+		HRESULT WINAPI EnumFormatEtc(DWORD dwDirection, IEnumFORMATETC** ppEnumFormatEtc);
+		HRESULT WINAPI DAdvise(FORMATETC* pFormatEtc, DWORD advf, IAdviseSink* pAdvSink, DWORD* pdwConnection);
+		HRESULT WINAPI DUnadvise(DWORD dwConnection);
+		HRESULT WINAPI EnumDAdvise(IEnumSTATDATA** ppEnumAdvise);
+		// Heap only - Call to Release() is required
+		ULONG WINAPI Release();
+	protected:
+		data_object(FORMATETC* fmt, STGMEDIUM* med, int cnt);
+		HRESULT WINAPI QueryInterface(REFIID iid, void** ppvObject);
+		ULONG WINAPI AddRef();
+		int get_format_index(FORMATETC* frmt);
+	private:
+		volatile long ref_count;
+		FORMATETC* formats;
+		STGMEDIUM* mediums;
+		long format_cnt;
+	};
+
+	class drop_target :
+		public IDropTarget
+	{
+	public:
+		drop_target(drawsurface* target);
+		virtual ~drop_target();
+
+		void register_dragdrop();
+		void deregister_dragdrop();
+		void register_helper();
+		void deregister_helper();
+		IDropTargetHelper* get_helper() const {return drop_helper;}
+	protected:
+		HRESULT WINAPI QueryInterface(REFIID iid, void** ppvObject);
+		ULONG WINAPI AddRef();
+		// Calling Release() won't call delete! drop_target is used on Stack, for use one Heap call 'delete' after calling Release()
+		ULONG WINAPI Release();
+
+		HRESULT WINAPI DragEnter(IDataObject* pDataObject, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect);
+		HRESULT WINAPI DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect);
+		HRESULT WINAPI DragLeave();
+		HRESULT WINAPI Drop(IDataObject* pDataObject, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect);
+	private:
+		drawsurface* wnd;
+		volatile long ref_count;
+		IDropTargetHelper* drop_helper;
+	};
+
+	class drop_source :
+		public IDropSource
+	{
+	public:
+		drop_source(); 
+	protected:
+		HRESULT WINAPI QueryInterface(REFIID iid, void** ppvObject);
+		ULONG WINAPI AddRef();
+		ULONG WINAPI Release();
+		HRESULT WINAPI QueryContinueDrag (BOOL fEscapePressed, DWORD grfKeyState);
+		HRESULT WINAPI GiveFeedback(DWORD dwEffect);
+	private:
+		volatile long ref_count;
+	};
+
+	drop_effects get_effect_from_keys(DWORD keystate);
+	HGLOBAL data_to_global(const void* src, size_t len);
 };
 
 class _cl_hlp
@@ -1296,7 +1420,8 @@ public:
 	dynamic_drawsurface();
 	virtual ~dynamic_drawsurface();
 
-	callback<void(const dynamic_drawsurface*)> parent_changed;
+	callback<void(dynamic_drawsurface*)> parent_changed;
+	callback<void(drawsurface*)> owner_changed;
 	callback<void(const horizontal_align&)> horizontal_align_changed;
 	callback<void(const vertical_align&)> vertical_align_changed;
 	callback<void(const margin&)> margin_changed;
@@ -1368,9 +1493,11 @@ public:
 	virtual void erase_cursor();
 	virtual bool is_rectangular() const {return true;}
 	virtual bool get_captures_keyboard() const {return key_capture;}
+	virtual bool get_captures_tab() const {return tab_capture;}
 	virtual bool get_captures_mouse_wheel() const {return mouse_capture;}
 	virtual void set_captures_keyboard(bool b) {key_capture = b;}
 	virtual void set_captures_mouse_wheel(bool b) {mouse_capture = b;}
+	virtual void set_captures_tab(bool b) {tab_capture = b;}
 	matrix get_absolute_transform() const;
 	inline point point_to_surface(const point& p) {return point(p.x - get_position().x, p.y - get_position().y);}
 	inline point point_from_surface(const point& p) {return point(p.x + get_position().x, p.y + get_position().y);}
@@ -1384,6 +1511,16 @@ public:
 	// Sets the contextmenu for the surface. Hold by a shared_ptr<>
 	void set_menu(ui::context_menu* m);
 	ui::context_menu* get_menu() const {return menu.get();}
+	bool is_in_range(const point& p)
+	{
+		matrix m = get_absolute_transform();
+		point pc = p;
+		m.invert();
+		m.transform_points(&pc);
+		rect rc = get_bounds();
+		return contains(p) || (is_between_equ(pc.x, rc.get_left()-horizontal_leave_offset, rc.get_right()+horizontal_leave_offset) && is_between_equ(pc.y, rc.get_top()-vertical_leave_offset, rc.get_bottom()+vertical_leave_offset)); 
+	}
+	bool has_resources() const {return hs_resources;}
 protected:
 	virtual void on_mouse_move(const int m, const point& p);
 	virtual void on_mouse_dbl_click(const mouse_buttons& b, const int m, const point& p);
@@ -1399,10 +1536,16 @@ protected:
 	virtual void on_key_up(const virtual_keys& key, const key_extended_params& params);
 	virtual void on_syskey_down(const virtual_keys& key, const key_extended_params& params);
 	virtual void on_syskey_up(const virtual_keys& key, const key_extended_params& params);
-	virtual void on_char_sent(char c, const key_extended_params& params);
-	virtual void on_deadchar_sent(char c, const key_extended_params& params);
+	virtual void on_char_sent(wchar_t c, const key_extended_params& params);
+	virtual void on_deadchar_sent(wchar_t c, const key_extended_params& params);
+	virtual void on_syschar_sent(wchar_t c, const key_extended_params& params);
+	virtual void on_sysdeadchar_sent(wchar_t c, const key_extended_params& params);
 	virtual void on_menu_opening();
 	virtual bool on_tab_pressed();
+	virtual void on_drag_enter(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
+	virtual void on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
+	virtual void on_drag_leave();
+	virtual void on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
 	void init_resources(gcl::render_objects::graphics* g);
 	virtual void create_resources(render_objects::graphics* g);
 	render_objects::cursor_surface cur;
@@ -1414,10 +1557,11 @@ protected:
 	bool is_transf, is_abs_trnsf;
 private:
 	drawing_state draw_state;
+	IDataObject* last_data_object;
 	bool tabstop;
 	int tabidx;
 	z_layer z_position;
-	bool key_capture, mouse_capture;
+	bool key_capture, mouse_capture, tab_capture;
 	int bottom_s, top_s, topmost_s;
 	horizontal_align hor_align;
 	vertical_align vert_align;
@@ -1425,6 +1569,7 @@ private:
 	bool clip_childs;
 	margin mrgn;
 	bool is_mdown;
+	bool is_drop_entered;
 	bool focus;
 	shared_ptr<render_objects::font> m_font;
 	shared_ptr<render_objects::geometry> geo;

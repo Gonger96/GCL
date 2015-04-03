@@ -41,7 +41,10 @@ public:
 	{
 		if(app_started)
 			throw invalid_argument("Unable to start app twice");
-		CoInitialize(0);
+		if(FAILED(CoInitialize(0)))
+			throw runtime_error("Unable to initialize COM");
+		if(FAILED(OleInitialize(0)))
+			throw runtime_error("Unable to initialize OLE"); // OLE
 		w = w_p;
 		w->handle_created += [] (HWND hWnd)
 		{
@@ -63,6 +66,7 @@ public:
 			delete g;
 			g = 0;
 			CoUninitialize();
+			OleUninitialize();
 			throw;
 		}
 		delete w_p;
@@ -72,6 +76,7 @@ public:
 		if(num != EXIT_SUCCESS)
 			ui::msg_box::show(L"Window exited with code: " + to_wstring(num), L"Unsuccessfull termination", ui::msg_box::ok, ui::msg_box::error); 
 		CoUninitialize();
+		OleUninitialize();
 		return num;
 	}
 	static void init();
@@ -84,12 +89,6 @@ private:
 	static bool app_started;
 
 	static HINSTANCE inst;
-};
-
-class not_implemented : public exception
-{
-public:
-	not_implemented() : exception("The required function isn't available") {};
 };
 
 };

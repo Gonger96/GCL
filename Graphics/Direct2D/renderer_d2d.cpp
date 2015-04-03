@@ -16,7 +16,9 @@ d2d_font::d2d_font(const wstring& family_name, float size, int fstyle, ID2D1Fact
 		fontWeight = DWRITE_FONT_WEIGHT_BOLD;
 	else
 		fontWeight = DWRITE_FONT_WEIGHT_REGULAR;
-	if(FAILED(factory->CreateTextFormat(family_name.c_str(), NULL, fontWeight, fontStyle, DWRITE_FONT_STRETCH_NORMAL, sz, string_to_unicode_string(locale().name()).c_str(), &format))) throw runtime_error("Unable to create TextFormat");
+	wchar_t loc[LOCALE_NAME_MAX_LENGTH];
+	GetUserDefaultLocaleName(loc, LOCALE_NAME_MAX_LENGTH);
+	if(FAILED(factory->CreateTextFormat(family_name.c_str(), NULL, fontWeight, fontStyle, DWRITE_FONT_STRETCH_NORMAL, sz, loc, &format))) throw runtime_error("Unable to create TextFormat");
 }
 
 rect d2d_font::get_metrics(const wstring& s, const size& clip, graphics*) const
@@ -24,21 +26,62 @@ rect d2d_font::get_metrics(const wstring& s, const size& clip, graphics*) const
 	IDWriteTextLayout* layout;
 	if(FAILED(factory->CreateTextLayout(s.c_str(), s.length(), format, clip.width, clip.height, &layout)))
 		throw runtime_error("Unable to retrieve metrics");
+	DWRITE_TEXT_RANGE rg;
+	rg.length = s.length();
+	rg.startPosition = 0;
+	layout->SetFontStyle(static_cast<DWRITE_FONT_STYLE>(style), rg);
 	DWRITE_TEXT_METRICS metrics;
 	layout->GetMetrics(&metrics);
 	layout->Release();
-	return rect(metrics.left, metrics.top, metrics.width, metrics.height);
+	return rect(0, 0, max(metrics.widthIncludingTrailingWhitespace, metrics.width), metrics.height);
+}
+
+vector<wstring> d2d_font::get_available_font_families()
+{
+	vector<wstring> coll;
+	IDWriteFontCollection* fc = 0;
+	if(FAILED(factory->GetSystemFontCollection(&fc, TRUE)))
+		throw runtime_error("Unable to create FontCollection");
+	int cnt = fc->GetFontFamilyCount();
+	wchar_t loc[LOCALE_NAME_MAX_LENGTH];
+	GetUserDefaultLocaleName(loc, LOCALE_NAME_MAX_LENGTH);
+	for(int i = 0; i < cnt; i++)
+	{
+		IDWriteFontFamily* fam = 0;
+		fc->GetFontFamily(i, &fam);
+		IDWriteLocalizedStrings* str = 0;
+		fam->GetFamilyNames(&str);
+		BOOL exists = 0;
+		unsigned int idx = 0;
+		str->FindLocaleName(loc, &idx, &exists);
+		if(!exists)
+		{
+			str->FindLocaleName(L"en-us", &idx, &exists);
+		}
+		if(!exists)
+			idx = 0;
+		unsigned int len = 0;
+		str->GetStringLength(idx, &len);
+		wchar_t* name = new wchar_t[len+1];
+		str->GetString(idx, name, len+1);
+		coll.push_back(name);
+		delete[] name;
+		str->Release();
+		fam->Release();
+	}
+	fc->Release();
+	return move(coll);
 }
 // Font
 
 // Texture
-d2d_texture::d2d_texture(const wstring& filename, IWICImagingFactory* _factory, ID2D1RenderTarget* _target) : factory(_factory), target(_target), bmp(0), w_bmp(0), lock(0) 
+d2d_texture::d2d_texture(const wstring& filename, IWICImagingFactory* _factory, ID2D1RenderTarget* _target) : factory(_factory), target(_target), bmp(0), w_bmp(0), lock(0)
 {
 	if(FAILED(load_texture_file(filename, &bmp))) 
 		throw invalid_argument("Unable to load Bitmap");
 }
 
-d2d_texture::d2d_texture(int id, HINSTANCE inst, LPWSTR type, IWICImagingFactory* _factory, ID2D1RenderTarget* _target) : factory(_factory), target(_target), bmp(0), w_bmp(0), lock(0) 
+d2d_texture::d2d_texture(int id, HINSTANCE inst, LPWSTR type, IWICImagingFactory* _factory, ID2D1RenderTarget* _target) : factory(_factory), target(_target), bmp(0), w_bmp(0), lock(0)
 {
 	if(FAILED(load_texture_resource(id, type, inst, &bmp))) 
 		throw invalid_argument("Unable to load Bitmap");
@@ -422,7 +465,7 @@ direct2d_renderer::direct2d_renderer(HWND handle_, callback<void(const size&, co
 	create_resources();
 	RECT rc;
 	GetClientRect(handle, &rc);
-	if(FAILED(factory->CreateHwndRenderTarget(RenderTargetProperties(), HwndRenderTargetProperties(handle, SizeU(rc.right-rc.left, rc.bottom-rc.top)), &hwnd_render_target))) throw runtime_error("Couldn't initialize Direct2D");
+	if(FAILED(factory->CreateHwndRenderTarget(RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_HARDWARE), HwndRenderTargetProperties(handle, SizeU(rc.right-rc.left, rc.bottom-rc.top)), &hwnd_render_target))) throw runtime_error("Couldn't initialize Direct2D");
 }
 
 direct2d_renderer::direct2d_renderer(direct2d_renderer* old_renderer, d2d_texture* text)
@@ -438,7 +481,35 @@ direct2d_renderer::direct2d_renderer(direct2d_renderer* old_renderer, d2d_textur
 	get_current_target()->BeginDraw();
 	get_current_target()->DrawBitmap(text->get_native_member(), RectF(0, 0, static_cast<float>(text->get_width()), static_cast<float>(text->get_height())));
 	get_current_target()->EndDraw();
+}
 
+direct2d_renderer::direct2d_renderer(HDC _dc)
+{
+	if(!_dc)
+		throw invalid_argument("Empty HDC");
+	dc = _dc;
+	type = graphics_type::dc;
+	create_resources();
+	D2D1_PIXEL_FORMAT frmt;
+	frmt.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+	frmt.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	if(FAILED(factory->CreateDCRenderTarget(&RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_HARDWARE, frmt), &dc_render_target)))
+		throw runtime_error("Unable to create DCRenderTarget");
+	RECT rc;
+	GetWindowRect(WindowFromDC(dc), &rc);
+	if(FAILED(dc_render_target->BindDC(dc, &rc)))
+		throw runtime_error("Unable to bind DC");
+}
+
+void direct2d_renderer::bind_dc(HDC _dc)
+{
+	if(!dc_render_target)
+		throw logic_error("No DcRenderer");
+	dc = _dc;
+	RECT rc;
+	GetWindowRect(WindowFromDC(dc), &rc);
+	if(FAILED(dc_render_target->BindDC(dc, &rc)))
+		throw runtime_error("Unable to bind DC");
 }
 
 void direct2d_renderer::create_resources()
@@ -483,7 +554,7 @@ void direct2d_renderer::end()
 		EndPaint(handle, &ps);
 		dc = 0;
 	}
-	else
+	else if(type == graphics_type::texture)
 	{
 		ID2D1Bitmap* bmp_pr = 0;
 		bmp_render_target->GetBitmap(&bmp_pr);
@@ -517,6 +588,8 @@ ID2D1RenderTarget* direct2d_renderer::get_current_target() const
 		return hwnd_render_target;
 	case graphics_type::texture:
 		return bmp_render_target;
+	case graphics_type::dc:
+		return dc_render_target;
 	default:
 		throw invalid_argument("No target selected");
 	}
@@ -881,6 +954,11 @@ graphics* direct2d_renderer::create_graphics(HWND handle, callback<void(const si
 graphics* direct2d_renderer::create_graphics(texture* txt)
 {
 	return new direct2d_renderer(this, dynamic_cast<d2d_texture*>(txt));
+}
+
+graphics* direct2d_renderer::create_graphics(HDC _dc)
+{
+	return new direct2d_renderer(_dc);
 }
 
 font* direct2d_renderer::get_system_font(float sz, int fstyle) const

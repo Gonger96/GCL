@@ -67,6 +67,67 @@ protected:
 	CHOOSECOLOR clr;
 };
 
+struct file_type
+{
+	wstring descriptor, filter;
+	file_type(const wstring& desc, const wstring& filtr) : descriptor(desc), filter(filtr) {}
+	COMDLG_FILTERSPEC get_filter_spec() const
+	{
+		COMDLG_FILTERSPEC spec;
+		spec.pszName = descriptor.c_str();
+		spec.pszSpec = filter.c_str();
+		return spec;
+	}
+};
+
+class file_dlg
+{
+public:
+	virtual ~file_dlg() {opf->Release();}
+	bool show(HWND hWnd = 0);
+	void close();
+	wstring get_result();
+	IShellItem* get_result_item();
+	int get_file_type_index();
+	void set_default_extension(const wstring& ext);
+	void set_default_folder(const wstring& fn);
+	void set_default_folder(IShellItem* itm);
+	void set_file_types(file_type* bgn, file_type* end);
+	void set_filename(const wstring& fn);
+	void set_filename_label(const wstring& txt);
+	void set_ok_button_text(const wstring& txt);
+	void set_title(const wstring& txt);
+	void set_options(FILEOPENDIALOGOPTIONS optns);
+	void add_place(const wstring& filename, bool top);
+	void add_place(IShellItem* itm, bool top);
+	FILEOPENDIALOGOPTIONS get_options();
+protected:
+	file_dlg() {}
+	void set(IFileDialog* dlg) {opf = dlg;}
+	IFileDialog* opf;
+};
+
+class file_picker :
+	public file_dlg
+{
+public:
+	file_picker();
+	virtual ~file_picker() {}
+	IShellItemArray* get_results();
+	IFileOpenDialog* get_dialog() const {return dlg;}
+protected:
+	IFileOpenDialog* dlg;
+};
+
+class file_saver :
+	public file_dlg
+{
+public:
+	file_saver();
+	virtual ~file_saver() {}
+protected:
+	IFileSaveDialog* dlg;
+};
 
 };
 };

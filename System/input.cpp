@@ -99,6 +99,21 @@ void keyboard::send_input(const virtual_keys& key, char scan_code, const int fla
 	if(SendInput(1, &inp, sizeof(inp)) == 0)
 		throw runtime_error("Sending Keyboardinput failed");
 }
+
+char keyboard::virtkey_to_char(const virtual_keys& key)
+{
+	return static_cast<char>(MapVirtualKey(static_cast<UINT>(key), MAPVK_VK_TO_CHAR));
+}
+
+virtual_keys keyboard::scancode_to_virtkey(char scan_code)
+{
+	return static_cast<virtual_keys>(MapVirtualKey(scan_code, MAPVK_VSC_TO_VK));
+}
+
+char keyboard::virtkey_to_scancode(const virtual_keys& key)
+{
+	return static_cast<char>(MapVirtualKey(static_cast<UINT>(key), MAPVK_VK_TO_VSC));
+}
 // Keyboard
 
 }; 

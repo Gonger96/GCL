@@ -5,7 +5,7 @@ namespace gcl { namespace ui {
 // Window
 bool window::queue_running = false;
 
-window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), ico(0), surf_cur(0), ico_sm(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location)
+window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), ico(0), surf_cur(0), ico_sm(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location), drop_handler(this)
 {
 	cur = LoadCursor(NULL, IDC_ARROW);
 	set_min_size(size(0,0));
@@ -23,12 +23,15 @@ window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over)
 void window::create_resources(graphics* g)
 {
 	has_resources = true;
+	drop_handler.register_dragdrop();
 	if(!ico)
 		ico = shared_ptr<icon>(g->create_icon(system_icon::app));
 	if(!ico_sm)
 		ico_sm = shared_ptr<icon>(g->create_icon(system_icon::app));
 	if(!m_font)
 		m_font = shared_ptr<font>(g->get_system_font());
+	for(auto surf : surfaces)
+		surf->init_resources(g);
 };
 
 window::~window()
@@ -379,7 +382,7 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				}
 			}
 			if(!risen) mouse_down(btns, static_cast<int>(wParam), p);
-			InvalidateRect(hWnd, 0, TRUE);
+			InvalidateRect(hWnd, 0, FALSE);
 			break;
 		}
 	case WM_LBUTTONUP:
@@ -715,12 +718,12 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
-						surf->on_char_sent(static_cast<char>(wParam), params);
+						surf->on_char_sent(static_cast<wchar_t>(wParam), params);
 					risen = true;
 				}
 			}
 			if(!risen)
-				char_sent(static_cast<char>(wParam), params);
+				char_sent(static_cast<wchar_t>(wParam), params);
 			break;
 		}
 	case WM_DEADCHAR:
@@ -739,12 +742,60 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
-						surf->on_deadchar_sent(static_cast<char>(wParam), params);
+						surf->on_deadchar_sent(static_cast<wchar_t>(wParam), params);
 					risen = true;
 				}
 			}
 			if(!risen)
-				deadchar_sent(static_cast<char>(wParam), params);
+				deadchar_sent(static_cast<wchar_t>(wParam), params);
+			break;
+		}
+	case WM_SYSCHAR:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_syschar_sent(static_cast<wchar_t>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				syschar_sent(static_cast<wchar_t>(wParam), params);
+			break;
+		}
+	case WM_SYSDEADCHAR:
+		{
+			bool risen = false;
+			key_extended_params params;
+			bitset<32> b(lParam);
+			params.transition_state = b.test(31);
+			params.previous_state = b.test(30);
+			params.context_code = b.test(29);
+			params.extended_key = b.test(24);
+			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
+			params.repeat_count = lParam & 0xffff;
+			for(auto& surf : surfaces)
+			{
+				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
+				{
+					if(surf->get_enabled())
+						surf->on_sysdeadchar_sent(static_cast<wchar_t>(wParam), params);
+					risen = true;
+				}
+			}
+			if(!risen)
+				sysdeadchar_sent(static_cast<wchar_t>(wParam), params);
 			break;
 		}
 	case WM_SETCURSOR:
@@ -761,6 +812,8 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			break;
 		}
 	case WM_CLOSE:
+		drop_handler.deregister_dragdrop();
+		drop_handler.deregister_helper();
 		DestroyWindow(hWnd);
 		break;
 	case WM_SYSCOLORCHANGE: // Gucke nach älteren Systemen
@@ -790,7 +843,7 @@ int window::show(window* win, bool use_handle)
 	wstring classname = gcl_create_classname(L"GCL_hWndWrapp&");
 	WNDCLASSEX wcex = {};
 	wcex.cbSize = sizeof(WNDCLASSEX);
-	wcex.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+	wcex.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 	wcex.hCursor = cur.get_cursor();
 	wcex.hIcon = ico ? ico->get_icon() : LoadIcon(NULL, IDI_APPLICATION);
 	wcex.hIconSm = ico_sm ? ico_sm->get_icon() : wcex.hIcon;
@@ -1054,6 +1107,90 @@ void window::set_font(font* f)
 		m_font.reset(get_graphics()->get_system_font());
 	}
 }
+
+void window::on_drag_enter(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), handle, &pn, 1);
+	last_data_object = data_object;
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available())
+		{
+			surf->on_drag_enter(data_object, keystate, pt, effect);
+			surf->is_drop_entered = true;
+			risen = true;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drag_enter(data_object, keystate, pt, effect);
+}
+
+void window::on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), handle, &pn, 1);
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available() && surf->is_drop_entered)
+		{
+			surf->on_drag_over(keystate, pt, effect);
+			risen = true;
+		}
+		else if(surf->contains(p) && surf->is_available() && !surf->is_drop_entered)
+		{
+			surf->on_drag_enter(last_data_object, keystate, pt, effect);
+			surf->is_drop_entered = true;
+		}
+		else if(surf->is_drop_entered && !surf->contains(p))
+		{
+			surf->on_drag_leave();
+			surf->is_drop_entered = false;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drag_over(keystate, pt, effect);
+}
+
+void window::on_drag_leave()
+{
+	for(auto surf : surfaces)
+	{
+		if(surf->is_drop_entered)
+		{
+			surf->on_drag_leave();
+			surf->is_drop_entered = false;
+		}
+	}
+	if(get_enable_dragdrop())
+		drag_leave();
+}
+
+void window::on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect)
+{
+	bool risen = false;
+	POINT pn;
+	GetCursorPos(&pn);
+	MapWindowPoints(GetDesktopWindow(), handle, &pn, 1);
+	point p(static_cast<float>(pn.x), static_cast<float>(pn.y));
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->is_available() && surf->is_drop_entered/* && surf->get_enable_dragdrop()*/)
+		{
+			surf->on_drop(data_object, keystate, pt, effect);
+			surf->is_drop_entered = false;
+			risen = true;
+		}
+	}
+	if(!risen && get_enable_dragdrop())
+		drop(data_object, keystate, pt, effect);
+}
 // Window
 
 // WindowedTimer
@@ -1096,6 +1233,5 @@ void CALLBACK windowed_timer::timer_proc(HWND hWnd, UINT msg, UINT_PTR event_id,
 	}
 }
 // WindowedTimer
-
 };
 };

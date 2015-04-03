@@ -21,6 +21,13 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <Ole2.h>
+#include <Shlobj.h>
+// Add "ole32.lib" to the Linker
+#ifdef _MSC_VER
+#pragma comment (lib, "ole32.lib")
+#endif
+
 // Direct2D includes
 #include <D2D1.h>
 #include <d2d1helper.h>
@@ -53,20 +60,18 @@ using namespace D2D1;
 #include <iostream>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <vector>
 #include <string>
 #include <ctime>
-#include <future>
-#include <thread>
 #include <stdexcept>
 #include <random>
 #include <exception>
 #include <utility>
-#include <mutex>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <cmath>
-#include <atomic>
+#include <map>
 #include <sstream>
 #include <iomanip>
 #include <bitset>

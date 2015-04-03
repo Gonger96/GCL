@@ -38,6 +38,7 @@ public:
 	Font* get_native_font() {return f;}
 	StringFormat* get_native_format() {return frm;}
 	rect get_metrics(const wstring& str, const size& clip, graphics* g) const;
+	vector<wstring> get_available_font_families();
 private:
 	int style;
 	float sz;
@@ -105,7 +106,7 @@ public:
 	 
 	void set_wrap_mode(const wrap_modes& _mode) {mode = _mode; br->SetWrapMode(static_cast<WrapMode>(_mode));}
 	wrap_modes get_wrap_mode() const {return mode;}
-	void set_opacity(float) {throw not_implemented();}
+	void set_opacity(float) {throw logic_error("Not implemented");}
 	float get_opacity() const {return 1.f;}
 private:
 	TextureBrush* br;
@@ -271,6 +272,7 @@ public:
 	void begin();
 	void clear(const colour& c);
 	void end();
+	void bind_dc(HDC dc);
 
 	static colour gdicolor_to_colour(const Color& c);
 

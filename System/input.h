@@ -40,6 +40,9 @@ namespace gcl { namespace input {
 	bool get_key_state_async(const virtual_keys& key, bool& toggled);
 	namespace keyboard_input_flags {const int extended_key = KEYEVENTF_EXTENDEDKEY, key_up = KEYEVENTF_KEYUP, key_down = 0, scan_code = KEYEVENTF_SCANCODE, unicode = KEYEVENTF_UNICODE;};
 	void send_input(const virtual_keys& key, char scan_code, const int flags, const chrono::milliseconds& timestamp = chrono::milliseconds(0)); 
+	char virtkey_to_char(const virtual_keys& key);
+	virtual_keys scancode_to_virtkey(char scan_code);
+	char virtkey_to_scancode(const virtual_keys& key);
 	};
 
 }; 
