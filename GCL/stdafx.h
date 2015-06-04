@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <crtdbg.h>
 #define OEMRESOURCE
+#ifndef UNICODE
+#	define UNICODE
+#endif
 #define GDIPVER 0x0110
 // Windows includes
 #include <Windows.h>
@@ -23,6 +26,7 @@
 #include <dwmapi.h>
 #include <Ole2.h>
 #include <Shlobj.h>
+#include <Shlwapi.h>
 // Add "ole32.lib" to the Linker
 #ifdef _MSC_VER
 #pragma comment (lib, "ole32.lib")
