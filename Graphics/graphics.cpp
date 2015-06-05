@@ -312,7 +312,7 @@ void matrix::transform_points(point* pts, unsigned int count) const
 	}
 }
 
-const void matrix::transform_vectors(point* pts, unsigned int count) const
+void matrix::transform_vectors(point* pts, unsigned int count) const
 {
 	for(unsigned int i = 0; i < count; i++, pts++)
 	{

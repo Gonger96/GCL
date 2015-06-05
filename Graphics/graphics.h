@@ -474,7 +474,7 @@ public:
 	matrix operator/(const matrix& m);
 	matrix operator/(float scalar);
 	void transform_points(point* pts, unsigned int count = 1) const;
-	const void transform_vectors(point* pts, unsigned int count = 1) const;
+	void transform_vectors(point* pts, unsigned int count = 1) const;
 	void invert();
 	static matrix rotation(float angle);
 	void rotate(float angle);
