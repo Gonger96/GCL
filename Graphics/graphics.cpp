@@ -1168,7 +1168,7 @@ void dynamic_drawsurface::on_menu_opening()
 	auto surf = get_focused_surface();
 	if(surf)
 		surf->on_menu_opening();
-	else if(menu)
+	else if(mmenu)
 	{
 		point p(get_center(this));
 		if(owner)
@@ -1178,7 +1178,7 @@ void dynamic_drawsurface::on_menu_opening()
 			p.x = static_cast<float>(pa.x); 
 			p.y = static_cast<float>(pa.y);
 		}
-		menu->show(p);
+		mmenu->show(p);
 	}
 }
 
@@ -1685,11 +1685,11 @@ void dynamic_drawsurface::on_mouse_up(const mouse_buttons& b, const int m, const
 	}
 	if(!risen) 
 	{
-		if(menu && b == mouse_buttons::right && get_focus())
+		if(mmenu && b == mouse_buttons::right && get_focus())
 		{
 			POINT p;
 			GetCursorPos(&p);
-			menu->show(point(static_cast<float>(p.x), static_cast<float>(p.y)));
+			mmenu->show(point(static_cast<float>(p.x), static_cast<float>(p.y)));
 		}
 		mouse_up(b, m, point_to_surface(p));
 	}
@@ -1926,9 +1926,9 @@ void dynamic_drawsurface::init_resources(gcl::render_objects::graphics* g)
 
 void dynamic_drawsurface::set_menu(ui::context_menu* m)
 {
-	if(m == menu.get())
+	if(m == mmenu.get())
 		return;
-	menu = shared_ptr<ui::context_menu>(m);
+	mmenu = shared_ptr<ui::context_menu>(m);
 	menu_changed(m);
 }
 
@@ -1970,7 +1970,7 @@ void menu_graphics::set_front_colour(const colour& cl)
 	if(highlight_brush)
 		highlight_brush->set_colour(cl);
 	front_colour_changed(cl);
-	redraw();
+	int_redraw();
 }
 
 void menu_graphics::set_hot_colour(const colour& cl)
@@ -1980,7 +1980,7 @@ void menu_graphics::set_hot_colour(const colour& cl)
 	if(hot_brush)
 		hot_brush->set_colour(cl);
 	hot_colour_changed(cl);
-	redraw();
+	int_redraw();
 }
 
 void menu_graphics::set_grayed_colour(const colour& cl)
@@ -1990,7 +1990,7 @@ void menu_graphics::set_grayed_colour(const colour& cl)
 	if(grayed_brush)
 		grayed_brush->set_colour(cl);
 	grayed_colour_changed(cl);
-	redraw();
+	int_redraw();
 }
 
 void menu_graphics::set_back_colour(const colour& cl)
@@ -1998,7 +1998,7 @@ void menu_graphics::set_back_colour(const colour& cl)
 	if(!change_if_diff(cl_back, cl))
 		return;
 	back_colour_changed(cl);
-	redraw();
+	int_redraw();
 }
 // Menugraphics
 
@@ -2031,7 +2031,7 @@ void menu_strip::add_strip(menu_strip* strip)
 		throw logic_error("Strip wasn't initialized");
 	strip->p = this;
 	childs.push_back(strip);
-	redraw();
+	int_redraw();
 }
 
 void menu_strip::update_resources()
@@ -2047,10 +2047,10 @@ void menu_strip::update_resources()
 		wc.style = CS_DROPSHADOW | CS_ENABLE;
 		if(!RegisterClass(&wc))
 			throw runtime_error("Unable to register menuclass");
-		handle = CreateWindowEx(WS_EX_TOPMOST, classname.c_str(), L"", WS_POPUP | WS_VISIBLE, 0, 0, 0, 0, p->get_owner(), 0, GetModuleHandle(NULL), this);
+		handle = CreateWindowEx(WS_EX_TOPMOST, classname.c_str(), L"", WS_POPUP | WS_VISIBLE, 0, 0, 0, 0, p->get_howner(), 0, GetModuleHandle(NULL), this);
 		if(!handle)
 			throw runtime_error("Unable to create menu");
-		SetFocus(p->get_owner());
+		SetFocus(p->get_howner());
 		window_graphics.reset(p->get_graphics()->create_graphics(handle, size_changed));
 		window_graphics->set_antialias(true);
 		title_font = shared_ptr<font>(window_graphics->get_system_font());
@@ -2064,7 +2064,7 @@ void menu_strip::update_resources()
 		{
 			cl_hi = colour::white;
 			cl_gray = colour::gray;
-			cl_hot = colour::gcl_menu_gray;
+			cl_hot = colour::gcl_gray;
 		}
 		highlight_brush = shared_ptr<render_objects::solid_brush>(window_graphics->create_solid_brush(cl_hi));
 		grayed_brush = shared_ptr<solid_brush>(window_graphics->create_solid_brush(cl_gray));
@@ -2114,7 +2114,7 @@ void menu_strip::render(graphics* g, drawing_state draw_state, const point& orig
 {
 	float imgh = icon::get_small_icon_size().height;
 	if(draw_state == drawing_state::hot && enabled)
-		g->fill_rect(rect(origin.x+2, origin.y-2, p->get_size().width - 4, get_height()+4), p->get_hot_brush());
+		g->fill_rect(rect(origin.x+2, origin.y-2, p->get_hsize().width - 4, get_height()+4), p->get_hot_brush());
 	if(checkable && checked && image)
 	{
 		g->fill_rect(rect(origin.x+5, origin.y+get_height()/2.f-imgh/2.f-2, imgh+4, imgh+4), p->get_hot_brush());
@@ -2127,20 +2127,20 @@ void menu_strip::render(graphics* g, drawing_state draw_state, const point& orig
 	}
 	if(image)
 		g->draw_texture(image.get(), rect(origin.x+7, origin.y+get_height()/2.f-imgh/2.f, imgh, imgh));
-	g->draw_string(title, rect(origin.x+imgh+14.f, origin.y, p->get_size().width, get_height()), p->get_font(), enabled ? p->get_brush() : p->get_grayed_brush(), render_objects::string_format::direction_left_to_right, render_objects::horizontal_string_align::left, render_objects::vertical_string_align::middle);
+	g->draw_string(title, rect(origin.x+imgh+14.f, origin.y, p->get_hsize().width, get_height()), p->get_title_font(), enabled ? p->get_brush() : p->get_grayed_brush(), render_objects::string_format::direction_left_to_right, render_objects::horizontal_string_align::left, render_objects::vertical_string_align::middle);
 	if(seperator_top)
-		g->draw_line(point(origin.x+imgh+12.f, origin.y-2.f), point(p->get_size().width-2, origin.y-2.f), p->get_pen());
+		g->draw_line(point(origin.x+imgh+12.f, origin.y-2.f), point(p->get_hsize().width-2, origin.y-2.f), p->get_pen());
 	if(seperator_bottom)
-		g->draw_line(point(origin.x+imgh+12.f, origin.y+get_height()+2.f), point(p->get_size().width-2, origin.y+get_height()+2.f), p->get_pen());
+		g->draw_line(point(origin.x+imgh+12.f, origin.y+get_height()+2.f), point(p->get_hsize().width-2, origin.y+get_height()+2.f), p->get_pen());
 	g->set_antialias(false);
 	if(hs_childs && !p->get_child_shown())
 	{
-		point arr[] = {point(p->get_size().width - 5, origin.y+get_height()/2.f), point(p->get_size().width - arrow_size - 5, origin.y+get_height()/2.f-arrow_size), point(p->get_size().width-arrow_size-5, origin.y+get_height()/2.f+arrow_size)};
+		point arr[] = {point(p->get_hsize().width - 5, origin.y+get_height()/2.f), point(p->get_hsize().width - arrow_size - 5, origin.y+get_height()/2.f-arrow_size), point(p->get_hsize().width-arrow_size-5, origin.y+get_height()/2.f+arrow_size)};
 		g->fill_polygon(arr, 3, p->get_grayed_brush());
 	}
 	else if(hs_childs)
 	{
-		point arr[] = {point(p->get_size().width-5-arrow_size, origin.y+get_height()/2.f), point(p->get_size().width - 5, origin.y+get_height()/2.f-arrow_size), point(p->get_size().width - 5, origin.y+get_height()/2.f+arrow_size)};
+		point arr[] = {point(p->get_hsize().width-5-arrow_size, origin.y+get_height()/2.f), point(p->get_hsize().width - 5, origin.y+get_height()/2.f-arrow_size), point(p->get_hsize().width - 5, origin.y+get_height()/2.f+arrow_size)};
 		g->fill_polygon(arr, 3, p->get_grayed_brush());
 	}
 	g->set_antialias(true);
@@ -2161,7 +2161,7 @@ void menu_strip::render_childs(graphics* g)
 	g->end();
 }
 
-void menu_strip::redraw(rect rc)
+void menu_strip::int_redraw(rect rc)
 {
 	if(!handle)
 		return;
@@ -2173,11 +2173,11 @@ void menu_strip::redraw(rect rc)
 	InvalidateRect(handle, &rec, TRUE);
 }
 
-void menu_strip::redraw()
+void menu_strip::int_redraw()
 {
 	if(handle)
 		InvalidateRect(handle, 0, TRUE);
-	p->redraw();
+	p->int_redraw();
 }
 
 point* menu_strip::get_hook(float x, float y)
@@ -2198,14 +2198,14 @@ void menu_strip::set_height(float v)
 	if(!change_if_diff(height, v))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_image(texture* img)
 {
 	image.reset(img);
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_checked(bool b)
@@ -2213,7 +2213,7 @@ void menu_strip::set_checked(bool b)
 	if(!change_if_diff(checked, b))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_checkable(bool b)
@@ -2221,7 +2221,7 @@ void menu_strip::set_checkable(bool b)
 	if(!change_if_diff(checkable, b))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_enabled(bool b)
@@ -2229,7 +2229,7 @@ void menu_strip::set_enabled(bool b)
 	if(!change_if_diff(enabled, b))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_title(const wstring& text)
@@ -2237,7 +2237,7 @@ void menu_strip::set_title(const wstring& text)
 	if(!change_if_diff(title, text))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_top_seperator(bool b)
@@ -2245,7 +2245,7 @@ void menu_strip::set_top_seperator(bool b)
 	if(!change_if_diff(seperator_top, b))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
 void menu_strip::set_bottom_seperator(bool b)
@@ -2253,10 +2253,10 @@ void menu_strip::set_bottom_seperator(bool b)
 	if(!change_if_diff(seperator_bottom, b))
 		return;
 	if(p)
-		p->redraw();
+		p->int_redraw();
 }
 
-size menu_strip::get_size() const
+size menu_strip::get_hsize() const
 {
 	RECT rc = {};
 	GetClientRect(handle, &rc);
@@ -2423,9 +2423,9 @@ LRESULT menu_strip::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 				break;
 			case VK_LEFT:
 				{
-					SetFocus(p->get_handle());
+					SetFocus(p->get_hhandle());
 					p->_set_child_shown(false);
-					InvalidateRect(p->get_handle(), 0, TRUE);
+					InvalidateRect(p->get_hhandle(), 0, TRUE);
 					close(true);
 					break;
 				}
@@ -2551,6 +2551,7 @@ context_menu::context_menu(HWND owner_, render_objects::graphics* owner_graphics
 	hidx = -1;
 	child_arrow = 5.f;
 	owner = owner_;
+	opened = false;
 	classname =  gcl_create_classname(L"GCL_Contextmenu&");
 	WNDCLASS wc = {};
 	wc.hInstance = GetModuleHandle(NULL);
@@ -2567,7 +2568,7 @@ context_menu::context_menu(HWND owner_, render_objects::graphics* owner_graphics
 	window_graphics.reset(owner_graphics->create_graphics(handle, size_changed));
 	window_graphics->set_antialias(true);
 	title_font = shared_ptr<render_objects::font>(window_graphics->get_system_font());
-	cl_back = colour::gcl_dark_gray;
+	cl_back = colour::black;
 	if(is_high_contrast())
 	{
 		cl_hi = colour::menu_text;
@@ -2602,7 +2603,7 @@ void context_menu::add_strip(menu_strip* strip)
 		strip->p = this;
 	childs.push_back(strip);
 	if(handle)
-		redraw();
+		int_redraw();
 	if(!strip->hs_resources)
 		strip->create_resources(window_graphics.get());
 }
@@ -2611,14 +2612,14 @@ void context_menu::remove_strip(menu_strip* strip)
 {
 	childs.erase(remove(childs.begin(), childs.end(), strip));
 	if(handle)
-		redraw();
+		int_redraw();
 }
 
 void context_menu::clear_strips()
 {
 	childs.clear();
 	if(handle)
-		redraw();
+		int_redraw();
 }
 
 bool context_menu::test_handle(HWND hWnd)
@@ -2655,9 +2656,10 @@ void context_menu::show(const point& p, int custom_width)
 	shown(p);
 	ShowWindow(handle, SW_SHOW);
 	UpdateWindow(handle);
+	opened = true;
 }
 
-void context_menu::redraw(rect rc)
+void context_menu::int_redraw(rect rc)
 {
 	if(!handle)
 		return;
@@ -2669,7 +2671,7 @@ void context_menu::redraw(rect rc)
 	InvalidateRect(handle, &rec, TRUE);
 }
 
-void context_menu::redraw()
+void context_menu::int_redraw()
 {
 	if(handle)
 		InvalidateRect(handle, 0, TRUE);
@@ -2690,7 +2692,7 @@ void context_menu::render(render_objects::graphics* gr)
 	gr->end();
 }
 
-size context_menu::get_size() const
+size context_menu::get_hsize() const
 {
 	RECT rc = {};
 	GetClientRect(handle, &rc);
@@ -2749,7 +2751,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			for(unsigned i = 0; i < childs.size(); ++i)
 			{
 				menu_strip* strip = childs[i];
-				if(rect(0, y, get_size().width, strip->get_height()).contains(point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)))))
+				if(rect(0, y, get_hsize().width, strip->get_height()).contains(point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)))))
 					hidx = i;
 				y += strip->get_height()+4.f;
 			}
@@ -2784,7 +2786,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			for(unsigned i = 0; i < childs.size(); ++i)
 			{
 				menu_strip* strip = childs[i];
-				if(rect(0, y, get_size().width, strip->get_height()).contains(point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)))) && strip->get_enabled())
+				if(rect(0, y, get_hsize().width, strip->get_height()).contains(point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)))) && strip->get_enabled())
 				{
 					if(strip->get_checkable())
 						strip->set_checked(!strip->get_checked());
@@ -2796,6 +2798,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 						if(i == showed_idx && child_shown)
 						{
 							strip->close(true);
+							opened = false;
 							child_shown = false;
 						}
 						else if(child_shown)
@@ -2803,6 +2806,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 							if(childs.size() > showed_idx)
 							{
 								childs[showed_idx]->close(true);
+								opened = false;
 								child_shown = false;
 							}
 						}
@@ -2834,7 +2838,10 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			GetClassName(reinterpret_cast<HWND>(wParam), buff, 255);
 			wstring clname(buff);
 			if(clname.find(L"GCL_Menustrip") == wstring::npos && clname.find(L"GCL_Contextmenu") == wstring::npos)
+			{
 				close(true);
+				opened = false;
+			}
 			break;
 		}
 	case WM_KEYDOWN:
@@ -2860,6 +2867,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 					if(!strip->hs_childs)
 					{
 						close(true);
+						opened = false;
 						break;
 					}
 				}
@@ -2884,6 +2892,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 				}
 			case VK_APPS:
 				close(true);
+				opened = false;
 			}
 			InvalidateRect(hWnd, 0, TRUE);
 			break;
@@ -2897,6 +2906,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 	case WM_CLOSE:
 		DestroyWindow(hWnd);
 		closed();
+		opened = true;
 		UnregisterClass(classname.c_str(), GetModuleHandle(0));
 		break;
 	default:
@@ -2908,6 +2918,7 @@ LRESULT context_menu::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 void context_menu::close(bool parent)
 {
 	ShowWindow(handle, SW_HIDE);
+	opened = false;
 	if(child_shown && childs.size() > showed_idx)
 	{
 		childs[showed_idx]->close(true);
@@ -2937,6 +2948,292 @@ LRESULT CALLBACK context_menu::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 	return inst->message_received(hWnd, msg, wParam, lParam);
 }
 // Contextmenu
+
+// MenuStripMain
+void menu_strip_m::set_title(const wstring& s)
+{
+	if(!change_if_diff(title, s))
+		return;
+	if(owner)
+		owner->redraw();
+}
+
+void menu_strip_m::set_menu(context_menu* menu)
+{
+	if(mmenu.get() == menu)
+		return;
+	mmenu.reset(menu);
+	if(owner)
+		owner->redraw();
+}
+
+void menu_strip_m::set_enabled(bool b)
+{
+	if(!change_if_diff(enabled, b))
+		return;
+	if(owner)
+		owner->redraw();
+}
+
+void menu_strip_m::measure(graphics* g, const point& p)
+{
+	rect rc = owner->get_font()->get_metrics(get_title(), size::max_size(), g);
+	rc.position = p;
+	bounds = rc;
+}
+// MenuStripMain
+
+// Menu
+menu::menu()
+{
+	set_captures_keyboard(false);
+	set_min_size(size(25, 25));
+	cl_back = colour::gcl_dark_gray;
+	cl_font = colour::white;
+	cl_hot = colour::gcl_gray;
+	cl_down = colour::black;
+	cl_gray = colour::gray;
+	space = 15.f;
+	hidex = -1;
+	mouse_move += make_func_ptr(this, &menu::this_mouse_move);
+	mouse_leave += make_func_ptr(this, &menu::this_mouse_leave);
+	mouse_up += make_func_ptr(this, &menu::this_mouse_up);
+	mouse_down += make_func_ptr(this, &menu::this_mouse_down);
+}
+
+menu::~menu()
+{
+	mouse_move -= make_func_ptr(this, &menu::this_mouse_move);
+	mouse_leave -= make_func_ptr(this, &menu::this_mouse_leave);
+	mouse_up += make_func_ptr(this, &menu::this_mouse_up);
+	mouse_down += make_func_ptr(this, &menu::this_mouse_down);
+}
+
+void menu::render(graphics* g)
+{
+	if(!has_resources())
+		init_resources(g);
+	g->push_clip(get_rect());
+	float x = space;
+	g->fill_rect(get_rect(), br_back.get());
+	for(unsigned i = 0; i < strips.size(); ++i)
+	{
+		auto strip = strips[i];
+		strip->measure(g, point(x+get_position().x, get_position().y));
+		rect measure = strip->get_bounds();
+		if(i == hidex && get_enabled() && strip->get_enabled())
+		{
+			g->fill_rect(strip->get_intersect_bounds(get_position().y, get_size().height, space), br_hot.get());
+		}
+		auto mnu = strip->get_menu();
+		if(mnu && get_enabled() && strip->get_enabled())
+		{
+			if(mnu->is_shown())
+				g->fill_rect(strip->get_intersect_bounds(get_position().y, get_size().height, space), br_down.get());
+		}
+		g->draw_string(strip->get_title(), point(x+get_position().x, get_position().y + get_size().height / 2.f - measure.get_height() / 2.f), get_font(), (get_enabled() && strip->get_enabled()) ? br_font.get() : br_gray.get());
+		x += measure.get_width()+space;
+	}
+	g->pop_clip();
+	dynamic_drawsurface::render(g);
+}
+
+void menu::set_opacity(float f)
+{
+	if(f == get_opacity())
+		return;
+	if(has_resources())
+	{
+		br_back->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_down->set_opacity(f);
+		br_font->set_opacity(f);
+		br_gray->set_opacity(f);
+	}
+	dynamic_drawsurface::set_opacity(f);
+}
+
+
+void menu::create_resources(graphics* g)
+{
+	dynamic_drawsurface::create_resources(g);
+	if(menu_graphics::is_high_contrast())
+	{
+		br_back = shared_ptr<solid_brush>(g->create_solid_brush(colour::menu));
+		br_down = shared_ptr<solid_brush>(g->create_solid_brush(colour::menu));
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(colour::menu_text));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(colour::menu_highlight));
+		br_gray = shared_ptr<solid_brush>(g->create_solid_brush(colour::gray_text));
+	}
+	else
+	{
+		br_back = shared_ptr<solid_brush>(g->create_solid_brush(cl_back));
+		br_down = shared_ptr<solid_brush>(g->create_solid_brush(cl_down));
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(cl_font));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(cl_hot));
+		br_gray = shared_ptr<solid_brush>(g->create_solid_brush(cl_gray));
+	}
+	if(get_opacity() != 1.f)
+	{
+		float f = get_opacity();
+		br_back->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_down->set_opacity(f);
+		br_font->set_opacity(f);
+		br_gray->set_opacity(f);
+	}
+}
+
+void menu::this_mouse_move(const int mod, const point& p1)
+{
+	int idx = hidex;
+	int opened_idx = get_opened();
+	point p = p1;
+	p.x += get_position().x;
+	p.y += get_position().y;
+	for(unsigned i = 0; i < strips.size(); ++i)
+	{
+		if(strips[i]->get_intersect_bounds(get_position().y, get_size().height, space).contains(p, get_absolute_transform()))
+		{
+			hidex = i;
+			if(hidex != idx)
+			{
+				redraw(get_bounds());
+				if(opened_idx != -1 && hidex != -1 && hidex != opened_idx && is_between_equ(idx, 0, static_cast<int>(strips.size()-1)))
+				{
+					auto strip = strips[hidex];
+					if(!strip->get_enabled())
+						break;
+					strips[idx]->get_menu()->close(true);
+					POINT pp = {static_cast<int>(strip->get_intersect_bounds(get_position().y, get_size().height, space).get_x()), static_cast<int>(get_position().y + get_size().height)};
+					MapWindowPoints(get_owner()->get_handle(), GetDesktopWindow(), &pp, 1);
+					strips[opened_idx]->get_menu()->close(true);
+					if(strip->get_menu())
+						strip->get_menu()->show(point(static_cast<float>(pp.x), static_cast<float>(pp.y)));
+				}
+			}
+			return;
+		}
+	}
+	hidex = -1;
+	if(hidex != idx)
+		redraw(get_bounds());
+}
+
+void menu::this_mouse_leave(const point&)
+{
+	if(hidex != -1)
+	{
+		hidex = -1;
+		redraw(get_bounds());
+	}
+}
+
+void menu::this_mouse_up(const mouse_buttons& mb, int modd, const point& p)
+{
+	if(hidex == -1 || mb != mouse_buttons::left || !get_enabled())
+		return;
+	auto strip = strips[hidex];
+	if(!strip->get_enabled())
+		return;
+	POINT pp = {static_cast<int>(strip->get_intersect_bounds(get_position().y, get_size().height, space).get_x()), static_cast<int>(get_position().y + get_size().height)};
+	MapWindowPoints(get_owner()->get_handle(), GetDesktopWindow(), &pp, 1);
+	if(strip->get_menu())
+		strip->get_menu()->show(point(static_cast<float>(pp.x), static_cast<float>(pp.y)));
+}
+
+int menu::get_opened()
+{
+	for(unsigned i = 0; i < strips.size(); ++i)
+	{
+		auto mnu = strips[i]->get_menu();
+		if(mnu)
+		{
+			if(mnu->is_shown())
+				return i;
+		}
+	}
+	return -1;
+}
+
+void menu::add_strip(menu_strip_m* strip)
+{
+	if(!strip->owner)
+		strip->owner = this;
+	strips.push_back(strip);
+	redraw();
+}
+
+void menu::remove_strip(menu_strip_m* strip)
+{
+	strip->owner = 0;
+	strips.erase(remove(strips.begin(), strips.end(), strip));
+	redraw();
+}
+
+void menu::clear_strips()
+{
+	strips.clear();
+	redraw();
+}
+
+void menu::on_syscolour_changed()
+{
+	if(menu_graphics::is_high_contrast())
+	{
+		br_back->set_colour(colour::menu);
+		br_down->set_colour(colour::menu);
+		br_font->set_colour(colour::menu_text);
+		br_hot ->set_colour(colour::menu_highlight);
+		br_gray->set_colour(colour::gray_text);
+	}		   
+	else	   
+	{		   
+		br_back->set_colour(cl_back);
+		br_down->set_colour(cl_down);
+		br_font->set_colour(cl_font);
+		br_hot ->set_colour(cl_hot);
+		br_gray->set_colour(cl_gray);
+	}
+	dynamic_drawsurface::on_syscolour_changed();
+}
+
+void menu::set_back_colour(const colour& c)
+{
+	if(!change_if_diff(cl_back, c))
+		return;
+	if(has_resources())
+		br_back->set_colour(cl_back);
+	back_colour_changed(cl_back);
+}
+
+void menu::set_hot_colour(const colour& c)
+{
+	if(!change_if_diff(cl_hot, c))
+		return;
+	if(has_resources())
+		br_hot->set_colour(cl_hot);
+	hot_colour_changed(cl_hot);
+}
+
+void menu::set_pressed_colour(const colour& c)
+{
+	if(!change_if_diff(cl_down, c))
+		return;
+	if(has_resources())
+		br_down->set_colour(cl_down);
+	pressed_colour_changed(cl_down);
+}
+
+void menu::set_font_colour(const colour& c)
+{
+	if(!change_if_diff(cl_font, c))
+		return;
+	if(has_resources())
+		br_font->set_colour(cl_font);
+	font_colour_changed(cl_font);
+}
+// Menu
 
 };
 };

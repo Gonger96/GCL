@@ -2786,6 +2786,7 @@ void progress_bar::create_resources(graphics* g)
 		br_back->set_opacity(get_opacity());
 		br_front->set_opacity(get_opacity());
 	}
+	dynamic_drawsurface::create_resources(g);
 }
 
 progress_bar& progress_bar::operator++()
@@ -2898,6 +2899,5 @@ void progress_bar::set_back_colour(colour c)
 	redraw(get_bounds());
 }
 // ProgressBar
-
 };
 };

@@ -1068,6 +1068,7 @@ enum class drawing_state {normal, pressed, hot};
 namespace ui {
 using namespace render_objects;
 class context_menu;
+class menu;
 
 class menu_graphics
 {
@@ -1075,18 +1076,18 @@ public:
 	virtual ~menu_graphics() {}
 	callback<void(const colour&)> front_colour_changed, grayed_colour_changed, hot_colour_changed, back_colour_changed;
 	graphics* get_graphics() const {return window_graphics.get();}
-	font* get_font() const {return title_font.get();}
+	font* get_title_font() const {return title_font.get();}
 	solid_brush* get_brush() const {return highlight_brush.get();}
 	solid_brush* get_hot_brush() const {return hot_brush.get();}
 	solid_brush* get_grayed_brush() const {return grayed_brush.get();}
-	virtual size get_size() const = 0;
+	virtual size get_hsize() const = 0;
 	pen* get_pen() const {return seperator_pen.get();}
-	virtual void redraw(rect rc) = 0;
-	virtual HWND get_owner() const {return owner;}
-	virtual void redraw() = 0;
+	virtual void int_redraw(rect rc) = 0;
+	virtual HWND get_howner() const {return owner;}
+	virtual void int_redraw() = 0;
 	virtual void close(bool parent) = 0;
 	virtual bool is_focused() const = 0;
-	HWND get_handle() const {return handle;}
+	HWND get_hhandle() const {return handle;}
 	virtual menu_graphics* get_parent() const = 0;
 	bool get_child_shown() const {return child_shown;}
 	void _set_child_shown(bool b) {child_shown = false;}
@@ -1099,13 +1100,13 @@ public:
 	void set_hot_colour(const colour& cl);
 	colour get_grayed_colour() const {return cl_gray;}
 	void set_grayed_colour(const colour& cl);
+	static bool is_high_contrast();
 protected:
 	shared_ptr<font> title_font;
 	bool child_shown;
 	HWND owner, handle;
 	shared_ptr<solid_brush> highlight_brush, grayed_brush, hot_brush;
 	colour cl_hi, cl_gray, cl_hot, cl_back;
-	bool is_high_contrast();
 	shared_ptr<pen> seperator_pen;
 	shared_ptr<graphics> window_graphics;
 };
@@ -1114,6 +1115,7 @@ class menu_strip :
 	public menu_graphics
 {
 friend class context_menu;
+friend class menu;
 public:
 	menu_strip();
 	virtual ~menu_strip();
@@ -1141,11 +1143,11 @@ public:
 	bool get_bottom_seperator() const {return seperator_bottom;}
 	texture* get_image() const {return image.get();}
 	void set_image(texture* img);
-	void redraw(rect rc);
-	void redraw();
-	size get_size() const;
+	void int_redraw(rect rc);
+	void int_redraw();
+	size get_hsize() const;
 	void add_strip(menu_strip* strip);
-	HWND get_owner() const {return p ? p->get_owner() : 0;}
+	HWND get_howner() const {return p ? p->get_howner() : 0;}
 	bool is_focused() const {return focus;}
 	menu_graphics* get_parent() const {return p;}
 	menu_strip* get_strip(int index) {return childs[index];}
@@ -1196,19 +1198,20 @@ public:
 
 	virtual void show(const point& p, int custom_width = 0); 
 	virtual void render(graphics* g);
-	void redraw(rect rc);
-	void redraw();
+	void int_redraw(rect rc);
+	void int_redraw();
 	void add_strip(menu_strip* strip);
 	void remove_strip(menu_strip* strip);
 	void clear_strips();
 	menu_strip* get_strip(int index) {return childs[index];}
 	menu_strip* operator[](int idx) {return childs[idx];}
 	int get_strip_count() const {return childs.size();}
-	size get_size() const;
-	HWND get_handle() {return handle;}
+	size get_hsize() const;
+	HWND get_hhandle() {return handle;}
 	void close(bool parent);
 	bool is_focused() const {return focus;}
 	menu_graphics* get_parent() const {return 0;}
+	bool is_shown() const {return opened;}
 protected:
 	vector<menu_strip*> childs;
 	virtual void on_syscolour_changed();
@@ -1218,6 +1221,7 @@ protected:
 private:
 	bool focus;
 	int hidx;
+	bool opened;
 	wstring classname;
 	bool mouse_over;
 	float child_arrow;
@@ -1510,7 +1514,7 @@ public:
 	drawing_state get_drawing_state() const {return draw_state;}
 	// Sets the contextmenu for the surface. Hold by a shared_ptr<>
 	void set_menu(ui::context_menu* m);
-	ui::context_menu* get_menu() const {return menu.get();}
+	ui::context_menu* get_menu() const {return mmenu.get();}
 	bool is_in_range(const point& p)
 	{
 		matrix m = get_absolute_transform();
@@ -1576,9 +1580,75 @@ private:
 	matrix trnsfrm;
 	HWND get_handle() const {return 0;}
 	dynamic_drawsurface* focused_surf;
-	shared_ptr<ui::context_menu> menu;
+	shared_ptr<ui::context_menu> mmenu;
 };
 
+namespace ui
+{
+class menu;
+struct menu_strip_m
+{
+friend class menu;
+public:
+	menu_strip_m() : enabled(true) {}
+	wstring get_title() const {return title;}
+	void set_title(const wstring& s);
+	context_menu* get_menu() const {return mmenu.get();}
+	void set_menu(context_menu* menu);
+	bool get_enabled() const {return enabled;}
+	void set_enabled(bool b);
+protected:
+	virtual void measure(graphics* g, const point& p);
+	rect get_bounds() const {return bounds;}
+	rect get_intersect_bounds(float y, float height, float space) const {return rect(bounds.get_x()-space/2.f, y, bounds.get_width()+space, height);}
+private:
+	rect bounds;
+	menu* owner;
+	wstring title;
+	bool enabled;
+	shared_ptr<context_menu> mmenu;
+};
+
+class menu :
+	public dynamic_drawsurface
+{
+public:
+	menu();
+	virtual ~menu();
+	virtual void render(graphics* g);
+	virtual bool is_rectangular() const {return true;}
+	virtual void create_resources(graphics* g);
+
+	callback<void(const colour&)> back_colour_changed, pressed_colour_changed, font_colour_changed, hot_colour_changed;
+	
+	void menu::add_strip(menu_strip_m* strip);
+	void menu::remove_strip(menu_strip_m* strip);
+	void menu::clear_strips();
+	colour get_back_colour() const {return cl_back;}
+	void set_back_colour(const colour& c);
+	colour get_hot_colour() const {return cl_hot;} 
+	void set_hot_colour(const colour& c);
+	colour get_pressed_colour() const {return cl_down;}
+	void set_pressed_colour(const colour& c);
+	colour get_font_colour() const {return cl_font;}
+	void set_font_colour(const colour& c);
+	virtual void set_opacity(float f);
+protected:
+	virtual void on_syscolour_changed();
+	void this_mouse_move(const int mod, const point& p);
+	void this_mouse_leave(const point&);
+	void this_mouse_down(const mouse_buttons& mb, int modd, const point& p) {}//opened = false;}
+	void this_mouse_up(const mouse_buttons& mb, int modd, const point& p);
+	vector<menu_strip_m*> strips;
+	colour cl_back, cl_down, cl_hot, cl_font, cl_gray;
+	shared_ptr<solid_brush> br_back, br_font, br_hot, br_down, br_gray;
+	int get_opened();
+private:
+	int hidex;
+	float space;
+};
+
+};
 
 };
 

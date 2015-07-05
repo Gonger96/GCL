@@ -675,6 +675,8 @@ public:
 	virtual void set_opacity(float f)
 	{
 		if(get_opacity() == f) return;
+		if(f < 0 || f > 1.f)
+			throw invalid_argument("Invalid opacity");
 		if(has_resources())
 		{
 			br_back->set_opacity(f);
@@ -1586,31 +1588,6 @@ private:
 	shared_ptr<solid_brush> br_back, br_font, br_border, br_arrow, br_disabled;
 	shared_ptr<pen> p_border;
 };
-
-//class tree_node
-//{
-//public:
-//
-//	void begin_edit();
-//	void end_edit();
-//	void force_visible();
-//	bool get_visible();
-//	void expand();
-//	void expand_all();
-//	void collapse();
-//	void collapse_all();
-//	int get_node_count(bool child_nodes);
-//	int get_visble_node_count();
-//	void remove();
-//	void toggle();
-//
-//protected:
-//	void redraw();
-//	vector<tree_node> nodes;
-//private:
-//	bool collapsed, do_redraw;
-//
-//};
 
 enum class progress_state {normal, paused, cancelled};
 
