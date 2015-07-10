@@ -64,7 +64,7 @@ void layout_container::create_resources(graphics* g)
 void layout_container::set_opacity(float f)
 {
 	if(get_opacity() == f) return;
-	if(hs_resources)
+	if(has_resources())
 	{
 		br_bk->set_opacity(f);
 		br_fr->set_opacity(f);
@@ -476,7 +476,7 @@ void layout_container::on_mouse_move(const int m, const point& p)
 			rdr = true;
 		if(change_if_diff(hbar_ov, get_hbar().contains(pn)))
 			rdr = true;
-		if((valign == vertical_scroll_align::left ? pn.x >= (rc_c.get_right()+100) : (pn.x <= rc_c.get_left()-100))) // If Cursor out of range, release capture
+		if((valign == vertical_scroll_align::left ? pn.x >= (rc_c.get_right()+horizontal_leave_offset) : (pn.x <= rc_c.get_left()-horizontal_leave_offset))) // If Cursor out of range, release capture
 		{
 			if(vbar_dw)
 			{
@@ -484,7 +484,7 @@ void layout_container::on_mouse_move(const int m, const point& p)
 				rdr = true;
 			}
 		}
-		if((halign == horizontal_scroll_align::top ? pn.y >= (rc_f.get_bottom()+100) : (pn.y <= rc_f.get_top()-100))) // If Cursor out of range, release capture
+		if((halign == horizontal_scroll_align::top ? pn.y >= (rc_f.get_bottom()+vertical_leave_offset) : (pn.y <= rc_f.get_top()-vertical_leave_offset))) // If Cursor out of range, release capture
 		{
 			if(hbar_dw)
 			{
@@ -662,14 +662,13 @@ void layout_container::on_mouse_leave(const point& p)
 }
 // LayoutContainer
 
-// Stack_panel
-
+// StackPanel
 stack_panel::stack_panel() : orient(orientation::vertical), child_orient(child_orientation::top) {}
 
 void stack_panel::layout()
 {
 	dynamic_drawsurface* last_surf = 0;
-	if(hs_resources && !is_rectangular())
+	if(has_resources() && !is_rectangular())
 		update_shape(get_shape());
 	if(child_orient == child_orientation::top || child_orient == child_orientation::left)
 	{
@@ -678,7 +677,7 @@ void stack_panel::layout()
 			auto surf = *itr;
 			margin m = surf->get_margin();
 			float x = 0, y = 0;
-			float width = 0, height = 0;
+			float width = surf->get_size().width, height = surf->get_size().height;
 			if(orient == orientation::vertical)
 			{
 				switch(surf->get_horinzontal_align())
@@ -752,7 +751,7 @@ void stack_panel::layout()
 			auto surf = *itr;
 			margin m = surf->get_margin();
 			float x = 0, y = 0;
-			float width = 0, height = 0;
+			float width = surf->get_size().width, height = surf->get_size().height;
 			if(orient == orientation::vertical)
 			{
 				switch(surf->get_horinzontal_align())
@@ -838,40 +837,100 @@ void stack_panel::set_orient(const orientation& ort)
 	orient_changed(ort);
 	layout();
 }
+// StackPanel
 
-// Wrap_panel
-
-wrap_panel::wrap_panel() : orient(orientation::vertical), child_orient(child_orientation::top), fl_dir(flow_direction::top_to_bottom) {}
-
-void wrap_panel::layout()
+// Groupbox
+group_box::group_box()
 {
-	dynamic_drawsurface* last_surf = 0;
-	if(hs_resources && !is_rectangular())
-		update_shape(get_shape());
+	set_padding(padding(5, 5, 15, 5));
+	border_width = 1.f;
+	text_dist = 5.f;
+	cl_back = colour::gray;
+	cl_fback = colour::gcl_border;
+	cl_font = colour::white;
+	set_title(L"This is some Content");
+}
 
-	for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+group_box::~group_box()
+{}
+
+void group_box::render(graphics* g)
+{
+	init_resources(g);
+	if(get_focus() && get_enabled())
+		br_back->set_colour(cl_fback);
+	else
+		br_back->set_colour(cl_back);
+	rect text_bounds = get_font()->get_metrics(get_title(), size::max_size(), g);
+	g->draw_line(get_position(), point(get_position().x, get_size().height + get_position().y), pn_back.get());
+	g->draw_line(point(get_position().x, get_size().height + get_position().y), point(get_position().x+get_size().width, get_size().height + get_position().y), pn_back.get());
+	g->draw_line(point(get_position().x+get_size().width, get_size().height + get_position().y), point(get_position().x+get_size().width, get_position().y), pn_back.get());
+	if(get_position().x+3*text_dist+text_bounds.get_width() < get_position().x+get_size().width-text_dist)
+		g->draw_line(point(get_position().x+get_size().width, get_position().y), point(get_position().x+3*text_dist+text_bounds.get_width(), get_position().y),  pn_back.get());
+	else
+		g->draw_line(point(get_position().x+get_size().width, get_position().y), point(get_position().x+get_size().width-text_dist, get_position().y),  pn_back.get());
+	g->draw_line(get_position(), point(get_position().x + text_dist, get_position().y), pn_back.get());
+	g->push_clip(rect(point(max(get_position().x + text_dist, 0.1f), max(0.1f, get_position().y-text_bounds.get_height() / 2.f)), size(max(0.1f, get_size().width - 3*text_dist), text_bounds.get_height()+5)));
+	g->draw_string(get_title(), point(get_position().x + text_dist*2, get_position().y - text_bounds.get_height()/2.f), get_font(), br_font.get());
+	g->pop_clip();
+	layout_container::render(g);
+}
+
+void group_box::create_resources(graphics* g)
+{
+	layout_container::create_resources(g);
+	if(app::is_high_contrast_app())
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(colour::gray_text));
+	else
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(cl_font));
+	br_back = shared_ptr<solid_brush>(g->create_solid_brush(cl_back));
+	if(get_opacity() != 1)
+	{
+		float f = get_opacity();
+		br_font->set_opacity(f);
+		br_back->set_opacity(f);
+	}
+	pn_back = shared_ptr<pen>(g->create_pen(br_back.get(), border_width));
+}
+
+void group_box::set_opacity(float f)
+{
+	if(f == get_opacity())
+		return;
+	if(has_resources())
+	{
+		br_back->set_opacity(f);
+		br_font->set_opacity(f);
+	}
+	layout_container::set_opacity(f);
+}
+
+void group_box::layout()
+{
+	dynamic_drawsurface::layout();
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); itr++)
 	{
 		auto surf = *itr;
+		margin m = surf->get_margin();
+		float x = surf->get_position().x - get_hscroll_value(), y = surf->get_position().y - get_vscroll_value();
+		float width = surf->get_size().width, height = surf->get_size().height;
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x, y), false);}
+		surf->layout();
 	}
-	
 	if(owner) owner->redraw(get_bounds());
 	layouted();
 }
 
-float wrap_panel::get_row_height(int begn, int& row_count)
+void group_box::on_syscolour_changed()
 {
-	float width = 0.f, height = 0.f;
-	row_count = 0;
-	for(auto itr = next(surfaces.begin(), begn); itr != surfaces.end(); ++itr)
-	{
-		height = max((*itr)->get_size().height, height);
-		width += (*itr)->get_size().width;
-		row_count++;
-		if(width >= get_size().width)
-			break;
-	}
-	return height;
+	if(app::is_high_contrast_app())
+		br_font->set_colour(colour::gray_text);
+	else
+		br_font->set_colour(cl_font);
+	layout_container::on_syscolour_changed();
 }
+// Groupbox
 
 };
 };

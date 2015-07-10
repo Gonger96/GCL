@@ -18,6 +18,7 @@ window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over)
 	opacity = 1.f;
 	shown = false;
 	focused_surf = 0;
+	erase_colour = colour(0xFF343434);
 }
 
 void window::create_resources(graphics* g)

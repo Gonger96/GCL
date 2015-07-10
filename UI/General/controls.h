@@ -327,21 +327,21 @@ private:
 enum class selection_modes {none, single, multi};
 
 template <typename data>
-class listbox :
+class list_box :
 	public dynamic_drawsurface, public ui_colour
 {
 public:
 	struct list_member
 	{
-	friend class listbox<data>;
+	friend class list_box<data>;
 	public:
-		list_member(unsigned index, data member, const wstring& nm, listbox<data>& lb) : idx(index), mem(member), name(nm), lb_(lb), sel(false) {}
+		list_member(unsigned index, data member, const wstring& nm, list_box<data>& lb) : idx(index), mem(member), name(nm), lb_(lb), sel(false) {}
 		unsigned get_index() const {return idx;}
 		bool get_selected() const {return sel;}
 		void set_selected(bool b) 
 		{
 			if(lb_.select_mode != selection_modes::multi)
-				throw logic_error("Listbox is not multiselectable");
+				throw logic_error("list_box is not multiselectable");
 			sel = b; 
 			lb_.redraw(lb_.get_bounds());
 		}
@@ -352,14 +352,14 @@ public:
 		data mem;
 		bool sel;
 		wstring name;
-		listbox<data>& lb_;
+		list_box<data>& lb_;
 	};
 	typedef typename vector<list_member>::iterator list_iterator;
 	typedef typename vector<list_member>::const_iterator const_list_iterator;
 	typedef typename vector<list_member>::reverse_iterator reverse_list_iterator;
 	typedef typename vector<list_member>::const_reverse_iterator const_reverse_list_iterator;
 public:
-	listbox()
+	list_box()
 	{
 		select_mode = selection_modes::single;
 		set_captures_keyboard(true);
@@ -383,27 +383,27 @@ public:
 		valign = vertical_scroll_align::right;
 		halign = horizontal_scroll_align::bottom;
 		set_scrollbar_props();
-		owner_changed += make_func_ptr(this, &listbox<data>::this_owner_changed);
-		mouse_down += make_func_ptr(this, &listbox<data>::this_mouse_down);
-		key_down += make_func_ptr(this, &listbox<data>::this_keypress);
-		size_changed += make_func_ptr(this, &listbox<data>::this_size_changed);
-		vscr.value_changed += make_func_ptr(this, &listbox<data>::scr_value_changed);
-		hscr.value_changed += make_func_ptr(this, &listbox<data>::scr_value_changed);
-		mouse_wheel += make_func_ptr(this, &listbox<data>::this_mouse_wheel);
-		mouse_h_wheel += make_func_ptr(this, &listbox<data>::this_h_mouse_wheel);
-		font_changed += make_func_ptr(this, &listbox<data>::this_font_changed);
+		owner_changed += make_func_ptr(this, &list_box<data>::this_owner_changed);
+		mouse_down += make_func_ptr(this, &list_box<data>::this_mouse_down);
+		key_down += make_func_ptr(this, &list_box<data>::this_keypress);
+		size_changed += make_func_ptr(this, &list_box<data>::this_size_changed);
+		vscr.value_changed += make_func_ptr(this, &list_box<data>::scr_value_changed);
+		hscr.value_changed += make_func_ptr(this, &list_box<data>::scr_value_changed);
+		mouse_wheel += make_func_ptr(this, &list_box<data>::this_mouse_wheel);
+		mouse_h_wheel += make_func_ptr(this, &list_box<data>::this_h_mouse_wheel);
+		font_changed += make_func_ptr(this, &list_box<data>::this_font_changed);
 	}
-	virtual ~listbox()
+	virtual ~list_box()
 	{
-		owner_changed -= make_func_ptr(this, &listbox<data>::this_owner_changed);
-		mouse_down -= make_func_ptr(this, &listbox<data>::this_mouse_down);
-		key_down -= make_func_ptr(this, &listbox<data>::this_keypress);
-		size_changed -= make_func_ptr(this, &listbox<data>::this_size_changed);
-		vscr.value_changed -= make_func_ptr(this, &listbox<data>::scr_value_changed);
-		hscr.value_changed -= make_func_ptr(this, &listbox<data>::scr_value_changed);
-		mouse_wheel -= make_func_ptr(this, &listbox<data>::this_mouse_wheel);
-		mouse_h_wheel -= make_func_ptr(this, &listbox<data>::this_h_mouse_wheel);
-		font_changed -= make_func_ptr(this, &listbox<data>::this_font_changed);
+		owner_changed -= make_func_ptr(this, &list_box<data>::this_owner_changed);
+		mouse_down -= make_func_ptr(this, &list_box<data>::this_mouse_down);
+		key_down -= make_func_ptr(this, &list_box<data>::this_keypress);
+		size_changed -= make_func_ptr(this, &list_box<data>::this_size_changed);
+		vscr.value_changed -= make_func_ptr(this, &list_box<data>::scr_value_changed);
+		hscr.value_changed -= make_func_ptr(this, &list_box<data>::scr_value_changed);
+		mouse_wheel -= make_func_ptr(this, &list_box<data>::this_mouse_wheel);
+		mouse_h_wheel -= make_func_ptr(this, &list_box<data>::this_h_mouse_wheel);
+		font_changed -= make_func_ptr(this, &list_box<data>::this_font_changed);
 	}
 	virtual void render(graphics* g)
 	{
@@ -429,7 +429,7 @@ public:
 			if(mem->get_selected() && ((get_focus() && hide_sel) || !hide_sel))
 			{
 				if(select_mode != selection_modes::multi && selected_index != i)
-					throw logic_error("Listbox in singleselectmode cannot select multiple items");
+					throw logic_error("list_box in singleselectmode cannot select multiple items");
 				g->fill_rect(rect(rc.get_x()+2-hscr.get_value()*10, y+rc.get_y()+2+1, metric.get_width()+4, row_height-2), br_border.get());
 			}
 			g->draw_string(mem->get_display_title(), point(rc.get_x()+4-hscr.get_value()*10, y+rc.get_y()+1+row_height/2.f-metric.get_height()/2.f), get_font(), br_fn.get());

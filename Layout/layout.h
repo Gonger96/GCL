@@ -19,9 +19,6 @@ using namespace gcl::render_objects;
 
 namespace gcl { namespace ui { namespace layout {
 
-enum class horizontal_scroll_align {top, bottom};
-enum class vertical_scroll_align {left, right};
-
 class layout_container :
 	public dynamic_drawsurface
 {
@@ -70,7 +67,6 @@ public:
 	vertical_scroll_align get_vertical_scroll_align() const {return valign;}
 	void set_vertical_scroll_align(const vertical_scroll_align& align);
 	virtual void set_opacity(float f);
-
 protected:
 	virtual void on_syscolour_changed();
 	void on_mouse_move(const int m, const point& p);
@@ -139,20 +135,24 @@ private:
 	child_orientation child_orient;
 };
 
-enum class flow_direction {right_to_left, left_to_right, top_to_bottom, bottom_to_top};
-
-class wrap_panel :
-	public dynamic_drawsurface
+class group_box :
+	public layout_container
 {
 public:
-	wrap_panel();
+	group_box();
+	virtual ~group_box();
+	void render(graphics* g);
+	void create_resources(graphics* g);
 
 	virtual void layout();
+	virtual void set_opacity(float f);
+protected:
+	void on_syscolour_changed();
 private:
-	flow_direction fl_dir;
-	orientation orient;
-	child_orientation child_orient;
-	float get_row_height(int begn, int& row_count);
+	shared_ptr<solid_brush> br_back, br_font;
+	shared_ptr<pen> pn_back;
+	colour cl_back, cl_fback, cl_font;
+	float border_width, text_dist;
 };
 
 };
