@@ -1,8 +1,8 @@
 /*****************************************************************************
-*                           gcl - window.h                                   *
+*							 GCL - window.h                                  *
 *                      Copyright (C) F. Gausling                             *
-*    Version 0.0.0.1 Alpha for more information and the full license visit   *
-*                   http://github.com/Gonger96/GCL                           *
+*		Version 0.9.0 for more information and the full license visit	     *
+*						 http://www.gcl-ui.com		                         *
 *****************************************************************************/
 #include "stdafx.h"
 #include "graphics.h"
@@ -43,8 +43,6 @@ public:
 	void redraw();
 	void redraw(const rect& s);
 	void layout();
-	void add_surface(dynamic_drawsurface*);
-	void remove_surface(dynamic_drawsurface*);
 	void set_min_size(const size& s);
 	void set_max_size(const size& s);
 	void set_padding(const padding& p);
@@ -116,6 +114,8 @@ private:
 	dragdrop::drop_target drop_handler;
 	IDataObject* last_data_object;
 protected:
+	void add_surface(dynamic_drawsurface*);
+	void remove_surface(dynamic_drawsurface*);
 	virtual LRESULT message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	virtual void on_create_params(unsigned long& style, unsigned long& exstyle, unsigned int& class_style, wstring& classname) {}
 	virtual void create_resources(graphics*);

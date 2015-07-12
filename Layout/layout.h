@@ -1,8 +1,8 @@
 /*****************************************************************************
-*                           gcl - layout.h                                   *
+*                           GCL - layout.h			                         *
 *                      Copyright (C) F. Gausling                             *
-*    Version 0.0.0.1 Alpha for more information and the full license visit   *
-*                   http://github.com/Gonger96/GCL                           *
+*		Version 0.9.0 for more information and the full license visit	     *
+*						 http://www.gcl-ui.com		                         *
 *****************************************************************************/
 #include "stdafx.h"
 #include "graphics.h"
@@ -75,7 +75,7 @@ protected:
 	void on_mouse_up(const mouse_buttons& b, const int m, const point& p);
 	void on_mouse_enter(const point& p);
 	void on_mouse_leave(const point& p);
-private:
+protected: // ÄNDERN !!!!!'''''''''''''''''''''''''''''''####################################
 	float hfix, vfix;
 	float vwidth, hheight;
 	const float arrow_size;
@@ -135,12 +135,12 @@ private:
 	child_orientation child_orient;
 };
 
-class group_box :
+class group_panel :
 	public layout_container
 {
 public:
-	group_box();
-	virtual ~group_box();
+	group_panel();
+	virtual ~group_panel();
 	void render(graphics* g);
 	void create_resources(graphics* g);
 
@@ -153,6 +153,82 @@ private:
 	shared_ptr<pen> pn_back;
 	colour cl_back, cl_fback, cl_font;
 	float border_width, text_dist;
+};
+
+class tab_panel;
+
+class tab_page :                  
+	public dynamic_drawsurface
+{
+friend class tab_panel;
+public:
+	tab_page() {tab_owner = 0; width = height = 0; set_padding(padding(5, 5, 5, 5));set_captures_mouse_wheel(true);set_captures_keyboard(true);}
+	virtual ~tab_page() {}
+protected:
+	shared_ptr<solid_brush> sb;
+	tab_panel* tab_owner;
+	float width, height;
+private:
+	void set_visible(bool b) {dynamic_drawsurface::set_visible(b);}
+};
+
+typedef child_orientation tab_orientation;
+// Für enabled & visible tabs auch ändern
+class tab_panel :
+	public dynamic_drawsurface
+{
+public:
+	tab_panel();
+	virtual ~tab_panel();
+	virtual void render(graphics* g);
+	virtual bool is_rectangular() const {return true;}
+	virtual void create_resources(graphics* g);
+	virtual void layout();
+
+	callback<void(tab_page*)> selected_tab_changed;
+	callback<void(const colour&)> back_colour_changed, hot_colour_changed, font_colour_changed, tab_colour_changed, border_colour_changed, border_focused_colour_changed;
+
+	virtual void select_tab(int index);
+	void add_tab(tab_page* tab);
+	void remove_tab(tab_page* tab);
+	virtual void set_opacity(float f);
+	colour get_back_colour() const {return cl_back;}
+	void set_back_colour(const colour& c);
+	colour get_hot_colour() const {return cl_hot;}
+	void set_hot_colour(const colour& c);
+	colour get_font_colour() const {return cl_font;}
+	void set_font_colour(const colour& c);
+	colour get_tab_colour() const {return cl_tab;}
+	void set_tab_colour(const colour& c);
+	colour get_border_colour() const {return cl_border;}
+	void set_border_colour(const colour& c);
+	colour get_border_focused_colour() const {return cl_borderf;}
+	void set_border_focused_colour(const colour& c);
+protected:
+	vector<tab_page*> tabs;
+	rect get_tab_area();
+	float get_tab_width(int idx, graphics* g);
+	int get_tab_count();
+	// Start with position.x+border
+	virtual void add_surface(dynamic_drawsurface* surf);
+	virtual void remove_surface(dynamic_drawsurface* surf);
+	void on_syscolour_changed();
+	bool tab_contains(float start, int idx, const point& p);
+	void draw_tab_seperator(graphics* g);
+	void draw_tab(graphics* g, float start, int idx);
+	void this_mouse_move(const int mod, const point& p);
+	void this_mouse_leave(const point& p);
+	void this_mouse_down(const mouse_buttons& mb, const int mod, const point& p);
+	void this_key_down(const virtual_keys& vk, const key_extended_params& param);
+private:
+	shared_ptr<solid_brush> br_back, br_hot, br_font, br_tab, br_border, br_disabled;
+	shared_ptr<pen> pn_border;
+	colour cl_back, cl_hot, cl_font, cl_tab, cl_border, cl_borderf;
+	tab_orientation orient;
+	float tab_height, arrow_width, border_width, text_space;
+	int hidx;
+	tab_page* selected_tab;
+	
 };
 
 };

@@ -18,7 +18,7 @@ window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over)
 	opacity = 1.f;
 	shown = false;
 	focused_surf = 0;
-	erase_colour = colour(0xFF343434);
+	erase_colour = colour(0xFF323232);
 }
 
 void window::create_resources(graphics* g)
@@ -373,8 +373,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				btns = mouse_buttons::middle;
 			bool risen = false;
 			is_mouse_dwn = true;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->contains(p) && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -397,8 +398,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			else if(msg == WM_MBUTTONUP) 
 				btns = mouse_buttons::middle;
 			bool risen = false;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if((surf->contains(p) || surf->is_mouse_down()) && surf->get_visible() && is_mouse_dwn)
 				{
 					if(surf->get_enabled())
@@ -422,8 +424,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			else if(msg == WM_MBUTTONDBLCLK) 
 				btns = mouse_buttons::middle;
 			bool risen = false;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->contains(p) && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -445,8 +448,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		{
 			point p((float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam));
 			bool risen = false;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->contains(p) && surf->get_visible())
 				{
 					if(!surf->is_mouse_over() && surf->get_enabled())
@@ -519,8 +523,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		{
 			bool risen = false;
 			point pos = point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -536,8 +541,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		{
 			bool risen = false;
 			point pos = point(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -615,8 +621,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -642,8 +649,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -666,8 +674,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -690,8 +699,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -714,8 +724,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -738,8 +749,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -762,8 +774,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -786,8 +799,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			params.extended_key = b.test(24);
 			params.scan_code = static_cast<char>((lParam & 0xff0000) >> 16); 
 			params.repeat_count = lParam & 0xffff;
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 				{
 					if(surf->get_enabled())
@@ -820,8 +834,9 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	case WM_SYSCOLORCHANGE: // Gucke nach älteren Systemen
 		{
 			syscolour_changed();
-			for(auto& surf : surfaces)
+			for(int i = surfaces.size()-1; i >= 0; --i)
 			{
+				auto surf = *next(surfaces.begin(), i);
 				surf->on_syscolour_changed();
 			}
 			break;

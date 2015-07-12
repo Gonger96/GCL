@@ -1409,6 +1409,7 @@ void dynamic_drawsurface::remove_surface(dynamic_drawsurface* surf)
 	case z_layer::top_most:
 		topmost_s--;
 	}
+	layout();
 	surface_removed(surf);
 }
 
@@ -1602,14 +1603,29 @@ void dynamic_drawsurface::set_opacity(float f)
 void dynamic_drawsurface::on_mouse_move(const int m, const point& p)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->contains(p) && surf->get_visible())
 		{
 			if(!surf->is_mouse_over())
 			{
 				if(surf->get_enabled())
+				{
 					surf->on_mouse_enter(p);
+					draw_state = drawing_state::normal;
+					is_mover = is_mdown = false;
+					mouse_leave(p);
+					if(parent)
+					{
+						if(parent->contains(p))
+							parent->on_mouse_enter(p);
+					}
+					else if(owner)
+					{
+						SendMessage(owner->get_handle(), WM_GCL_CURSORCHANGED, 0, 0);
+					}
+				}
 				if(owner)
 					owner->redraw(get_bounds());
 			}
@@ -1630,8 +1646,9 @@ void dynamic_drawsurface::on_mouse_move(const int m, const point& p)
 void dynamic_drawsurface::on_mouse_dbl_click(const mouse_buttons& b, const int m, const point& p)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->contains(p) && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1652,8 +1669,9 @@ void dynamic_drawsurface::on_mouse_dbl_click(const mouse_buttons& b, const int m
 void dynamic_drawsurface::on_mouse_down(const mouse_buttons& b, const int m, const point& p)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->contains(p) &&  surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1675,8 +1693,9 @@ void dynamic_drawsurface::on_mouse_up(const mouse_buttons& b, const int m, const
 	bool risen = false;
 	is_mdown = false;
 	is_mover ? draw_state = drawing_state::hot : draw_state = drawing_state::normal;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->contains(p) && surf->is_available())
 		{
 			surf->on_mouse_up(b, m, p);
@@ -1698,8 +1717,9 @@ void dynamic_drawsurface::on_mouse_up(const mouse_buttons& b, const int m, const
 void dynamic_drawsurface::on_mouse_wheel(const int m, const point& p, int delta)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1714,8 +1734,9 @@ void dynamic_drawsurface::on_mouse_wheel(const int m, const point& p, int delta)
 void dynamic_drawsurface::on_mouse_h_wheel(const int m, const point& p, int delta)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_mouse_wheel() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1750,8 +1771,9 @@ void dynamic_drawsurface::on_mouse_leave(const point& p)
 {
 	draw_state = drawing_state::normal;
 	is_mover = is_mdown = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->is_available())
 		{
 			surf->on_mouse_leave(p);
@@ -1774,8 +1796,9 @@ void dynamic_drawsurface::on_mouse_leave(const point& p)
 void dynamic_drawsurface::on_key_down(const virtual_keys& key, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1790,8 +1813,9 @@ void dynamic_drawsurface::on_key_down(const virtual_keys& key, const key_extende
 void dynamic_drawsurface::on_key_up(const virtual_keys& key, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1808,8 +1832,9 @@ void dynamic_drawsurface::on_key_up(const virtual_keys& key, const key_extended_
 void dynamic_drawsurface::on_syskey_down(const virtual_keys& key, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1824,8 +1849,9 @@ void dynamic_drawsurface::on_syskey_down(const virtual_keys& key, const key_exte
 void dynamic_drawsurface::on_syskey_up(const virtual_keys& key, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1840,8 +1866,9 @@ void dynamic_drawsurface::on_syskey_up(const virtual_keys& key, const key_extend
 void dynamic_drawsurface::on_char_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1856,8 +1883,9 @@ void dynamic_drawsurface::on_char_sent(wchar_t c, const key_extended_params& par
 void dynamic_drawsurface::on_deadchar_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1872,8 +1900,9 @@ void dynamic_drawsurface::on_deadchar_sent(wchar_t c, const key_extended_params&
 void dynamic_drawsurface::on_syschar_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -1888,8 +1917,9 @@ void dynamic_drawsurface::on_syschar_sent(wchar_t c, const key_extended_params& 
 void dynamic_drawsurface::on_sysdeadchar_sent(wchar_t c, const key_extended_params& params)
 {
 	bool risen = false;
-	for(auto& surf : surfaces)
+	for(int i = surfaces.size()-1; i >= 0; --i)
 	{
+		auto surf = *next(surfaces.begin(), i);
 		if(surf->get_captures_keyboard() && surf->get_focus() && surf->get_visible())
 		{
 			if(surf->get_enabled())
@@ -2986,6 +3016,7 @@ void menu_strip_m::measure(graphics* g, const point& p)
 // Menu
 menu::menu()
 {
+	z_position = z_layer::top_most;
 	set_captures_keyboard(false);
 	set_min_size(size(25, 25));
 	cl_back = colour::gcl_dark_gray;

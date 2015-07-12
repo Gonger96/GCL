@@ -1,8 +1,8 @@
 /*****************************************************************************
-*                           gcl - graphics.h                                 *
+*                           GCL - graphics.h                                 *
 *                      Copyright (C) F. Gausling                             *
-*    Version 0.0.0.1 Alpha for more information and the full license visit   *
-*                   http://github.com/Gonger96/GCL                           *
+*		Version 0.9.0 for more information and the full license visit	     *
+*						 http://www.gcl-ui.com		                         *
 *****************************************************************************/
 #include "stdafx.h"
 #include "callback.h"
@@ -1270,7 +1270,9 @@ public:
 
 	virtual void render(render_objects::graphics* g)  = 0;
 	virtual bool contains(const point& p) const = 0;
-	
+	virtual void add_surface(dynamic_drawsurface*) = 0;
+	virtual void remove_surface(dynamic_drawsurface*) = 0;
+
 	virtual void set_focus(bool) = 0;
 	virtual bool get_focus() const = 0;
 	virtual void set_focused_surface(dynamic_drawsurface*) = 0;
@@ -1291,8 +1293,6 @@ public:
 	virtual void set_max_size(const size& s) = 0;
 	virtual margin get_padding() const {return pddng;};
 	virtual void set_padding(const padding& p) = 0;
-	virtual void add_surface(dynamic_drawsurface*) = 0;
-	virtual void remove_surface(dynamic_drawsurface*) = 0;
 	virtual bool get_enabled() const {return enabled;};
 	virtual void set_enabled(bool b) = 0;
 	virtual void redraw() = 0;
@@ -1453,9 +1453,6 @@ public:
 	void set_focused_surface(dynamic_drawsurface*);
 	dynamic_drawsurface* get_focused_surface() {return focused_surf;}
 
-	virtual void add_surface(dynamic_drawsurface* surf);
-	virtual void remove_surface(dynamic_drawsurface* surf) ;
-
 	virtual void redraw() {if(owner) owner->redraw();}
 	virtual void redraw(const rect& bounds) {if(owner) owner->redraw(bounds);}
 	virtual void layout();
@@ -1464,7 +1461,7 @@ public:
 	virtual void update_shape(render_objects::geometry* shape) {};
 	virtual void update_shape(const rect& shape) {};
 	dynamic_drawsurface* get_parent() const {return parent;}
-	void set_parent(dynamic_drawsurface* new_parent);
+	virtual void set_parent(dynamic_drawsurface* new_parent);
 	drawsurface* get_owner() const {return owner;}
 	void set_owner(drawsurface* ownr);
 	inline drawsurface* get_absolute_owner() const {return parent ? parent : owner;}
@@ -1526,6 +1523,8 @@ public:
 	}
 	bool has_resources() const {return hs_resources;}
 protected:
+	virtual void add_surface(dynamic_drawsurface* surf);
+	virtual void remove_surface(dynamic_drawsurface* surf);
 	virtual void on_mouse_move(const int m, const point& p);
 	virtual void on_mouse_dbl_click(const mouse_buttons& b, const int m, const point& p);
 	virtual void on_mouse_down(const mouse_buttons& b, const int m, const point& p);
@@ -1559,12 +1558,12 @@ protected:
 	bool hs_resources;
 	float opacity;
 	bool is_transf, is_abs_trnsf;
+	z_layer z_position;
 private:
 	drawing_state draw_state;
 	IDataObject* last_data_object;
 	bool tabstop;
 	int tabidx;
-	z_layer z_position;
 	bool key_capture, mouse_capture, tab_capture;
 	int bottom_s, top_s, topmost_s;
 	horizontal_align hor_align;

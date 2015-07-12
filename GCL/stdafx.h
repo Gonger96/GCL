@@ -1,9 +1,9 @@
 /*****************************************************************************
-*                           gcl - stdAfx.h                                   *
+*                           GCL - stdafx.h                                   *
 *                      Copyright (C) F. Gausling                             *
-*    Version 0.0.0.1 Alpha for more information and the full license visit   *
-*                   http://github.com/Gonger96/GCL                           *
-*                       Precompiled Header                                   *
+*		Version 0.9.0 for more information and the full license visit	     *
+*						 http://www.gcl-ui.com		                         *
+*                          Precompiled Header                                *
 *****************************************************************************/
 
 #ifndef RENDERER_STDAFX_H

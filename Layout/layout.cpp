@@ -839,8 +839,8 @@ void stack_panel::set_orient(const orientation& ort)
 }
 // StackPanel
 
-// Groupbox
-group_box::group_box()
+// Grouppanel
+group_panel::group_panel()
 {
 	set_padding(padding(5, 5, 15, 5));
 	border_width = 1.f;
@@ -851,16 +851,17 @@ group_box::group_box()
 	set_title(L"This is some Content");
 }
 
-group_box::~group_box()
+group_panel::~group_panel()
 {}
 
-void group_box::render(graphics* g)
+void group_panel::render(graphics* g)
 {
 	init_resources(g);
 	if(get_focus() && get_enabled())
 		br_back->set_colour(cl_fback);
 	else
 		br_back->set_colour(cl_back);
+	pn_back->update();
 	rect text_bounds = get_font()->get_metrics(get_title(), size::max_size(), g);
 	g->draw_line(get_position(), point(get_position().x, get_size().height + get_position().y), pn_back.get());
 	g->draw_line(point(get_position().x, get_size().height + get_position().y), point(get_position().x+get_size().width, get_size().height + get_position().y), pn_back.get());
@@ -876,7 +877,7 @@ void group_box::render(graphics* g)
 	layout_container::render(g);
 }
 
-void group_box::create_resources(graphics* g)
+void group_panel::create_resources(graphics* g)
 {
 	layout_container::create_resources(g);
 	if(app::is_high_contrast_app())
@@ -893,7 +894,7 @@ void group_box::create_resources(graphics* g)
 	pn_back = shared_ptr<pen>(g->create_pen(br_back.get(), border_width));
 }
 
-void group_box::set_opacity(float f)
+void group_panel::set_opacity(float f)
 {
 	if(f == get_opacity())
 		return;
@@ -905,7 +906,7 @@ void group_box::set_opacity(float f)
 	layout_container::set_opacity(f);
 }
 
-void group_box::layout()
+void group_panel::layout()
 {
 	dynamic_drawsurface::layout();
 	for(auto itr = surfaces.begin(); itr != surfaces.end(); itr++)
@@ -922,7 +923,7 @@ void group_box::layout()
 	layouted();
 }
 
-void group_box::on_syscolour_changed()
+void group_panel::on_syscolour_changed()
 {
 	if(app::is_high_contrast_app())
 		br_font->set_colour(colour::gray_text);
@@ -930,7 +931,582 @@ void group_box::on_syscolour_changed()
 		br_font->set_colour(cl_font);
 	layout_container::on_syscolour_changed();
 }
-// Groupbox
+// Grouppanel
+
+// TabPanel
+tab_panel::tab_panel()
+{
+	cl_back = colour::gcl_dark_gray;
+	cl_hot = colour::gcl_hot_gray;
+	cl_font = colour::white;
+	cl_tab = colour::gcl_gray;
+	cl_border = colour::gray;
+	cl_borderf = colour::gcl_border;
+	set_captures_mouse_wheel(true);
+	set_captures_keyboard(true);
+	tab_height = 20.f;
+	arrow_width = 15.f;
+	border_width = 1.f;
+	set_min_size(size(35, 35));
+	orient = tab_orientation::top;
+	text_space = 10.f;
+	selected_tab = 0;
+	hidx = -1;
+	mouse_move += make_func_ptr(this, & tab_panel::this_mouse_move);
+	mouse_leave += make_func_ptr(this, &tab_panel::this_mouse_leave);
+	mouse_down += make_func_ptr(this, &tab_panel::this_mouse_down);
+	key_down += make_func_ptr(this, &tab_panel::this_key_down);
+}
+
+tab_panel::~tab_panel() 
+{
+	mouse_move -= make_func_ptr(this, & tab_panel::this_mouse_move);
+	mouse_leave -= make_func_ptr(this, &tab_panel::this_mouse_leave);
+	mouse_down -= make_func_ptr(this, &tab_panel::this_mouse_down);
+	key_down -= make_func_ptr(this, &tab_panel::this_key_down);
+}
+
+void tab_panel::this_key_down(const virtual_keys& vk, const key_extended_params& param)
+{
+	if(tabs.empty())
+		return;
+	if(vk == virtual_keys::right)
+	{
+		auto itr = find(tabs.begin(), tabs.end(), selected_tab);
+		if(itr != tabs.end())
+		{
+			int idx = itr - tabs.begin();
+			if(++idx < static_cast<int>(tabs.size()))
+				select_tab(idx);
+			else
+				select_tab(0);
+		}
+	}
+	else if(vk == virtual_keys::left)
+	{
+		auto itr = find(tabs.begin(), tabs.end(), selected_tab);
+		if(itr != tabs.end())
+		{
+			int idx = itr - tabs.begin();
+			if(--idx >= 0)
+				select_tab(idx);
+			else
+				select_tab(tabs.size()-1);
+		}
+	}
+}
+
+void tab_panel::layout()
+{
+	if(has_resources() && !is_rectangular())
+		update_shape(get_shape());
+	for(auto& surf : surfaces)
+	{
+		tab_page* tab = dynamic_cast<tab_page*>(surf);
+		if(tab)
+		{
+			rect area = get_tab_area();
+			tab->set_position(area.position, false);
+			tab->set_size(area.sizef, false);
+		}
+		else
+		{
+			if(surf->get_auto_position())
+			{
+				float x = 0, y= 0;
+				float w = 0, h = 0;
+				margin m = surf->get_margin();
+				switch(surf->get_horinzontal_align())
+				{
+				case horizontal_align::left:
+					x = get_position().x;
+					w = 0;
+					break;
+				case horizontal_align::right:
+					x = get_size().width + get_position().x - surf->get_size().width;
+					w = 0;
+					break;
+				case horizontal_align::center:
+					x = (get_size().width/2.f + get_position().x) - surf->get_size().width / 2.f;
+					w = 0;
+					break;
+				case horizontal_align::stretch:
+					w = get_size().width;
+					x = get_position().x;
+				}
+				switch(surf->get_vertical_align())
+				{
+				case vertical_align::top:
+					y = get_position().y;
+					h = 0;
+					break;
+				case vertical_align::bottom:
+					y = get_size().height + get_position().y - surf->get_size().height;
+					h = 0;
+					break;
+				case vertical_align::center:
+					y = (get_size().height / 2.f+ get_position().y) - surf->get_size().height / 2.f;
+					h = 0;
+					break;
+				case vertical_align::stretch:
+					y = get_position().y;
+					h = get_size().height;
+				}
+				surf->set_position(point(x+pddng.left+m.left, y+pddng.top+m.top), false);
+				if(surf->get_auto_size())surf->set_size(size(w-pddng.right-pddng.left-m.right-m.left, h-pddng.top-pddng.bottom-m.bottom-m.top), false);
+			}
+		}
+		surf->layout();
+	}
+	redraw(get_bounds());
+	layouted();
+}
+
+void tab_panel::render(graphics* g)
+{
+	if(!has_resources())
+		init_resources(g);
+	if(get_focus() && get_enabled())
+		br_border->set_colour(cl_borderf);
+	else if(!get_focus() || !get_enabled())
+		br_border->set_colour(cl_border);
+	pn_border->update();
+	// Child area
+	g->fill_rect(get_tab_area(), br_back.get());
+	draw_tab_seperator(g);
+	// Tab area
+	g->push_clip(get_rect());
+	float dist;
+	if(orient == tab_orientation::top || orient == tab_orientation::bottom)
+		dist = get_size().width-2*border_width;
+	else
+		dist = get_size().height-2*border_width;
+	float curr_width = border_width;
+	for(unsigned i = 0; i < tabs.size(); ++i)
+	{
+		tabs[i]->width = get_tab_width(i, g);
+		draw_tab(g, curr_width, i);
+		curr_width += tabs[i]->width + border_width;
+		if(curr_width > dist)
+			break;
+	}
+	g->pop_clip();
+	if(!get_enabled())
+		g->fill_rect(get_tab_area(), br_disabled.get());
+	dynamic_drawsurface::render(g);
+}
+
+void tab_panel::draw_tab_seperator(graphics* g)
+{
+	rect rc = get_tab_area();
+	rc.position.x += border_width / 2.f;
+	rc.position.y += border_width / 2.f;
+	rc.sizef.width -= border_width;
+	rc.sizef.height -= border_width;
+	g->draw_rect(rc, pn_border.get());
+}
+
+void tab_panel::draw_tab(graphics* g, float start, int idx)
+{
+	bool b = g->get_antialias();
+	if(!is_transformed())
+		g->set_antialias(true);
+	auto tab = tabs[idx];
+	switch(orient)
+	{
+	case tab_orientation::top:
+		{
+			start += get_position().x;
+			if(tab == selected_tab)
+			{
+				g->draw_line(point(start-border_width/2.f, get_position().y), point(start-border_width/2.f, get_position().y + tab_height), pn_border.get()); // Left border
+				g->draw_line(point(start+tab->width-border_width/2.f, get_position().y), point(start+tab->width-border_width/2.f, get_position().y + tab_height), pn_border.get()); // Right border
+				g->draw_line(point(start-border_width/2.f, get_position().y+border_width/2.f), point(start+tab->width-border_width/2.f, get_position().y + border_width / 2.f), pn_border.get()); // Top border
+				g->fill_rect(rect(start, get_position().y+border_width, tab->width-border_width, tab_height+10), br_back.get());
+				g->draw_line(point(get_position().x + get_size().width - border_width / 2.f, get_position().y + get_size().height-border_width/2.f), point(get_position().x + get_size().width - border_width / 2.f, get_position().y+tab_height), pn_border.get());
+			}
+			else
+				g->fill_rect(rect(start-border_width, get_position().y, tab->width+border_width, tab_height), hidx == idx ? br_hot.get() : br_tab.get());
+			g->draw_string(tab->get_title(), point(start + text_space, get_position().y+border_width/2.f+tab_height/2.f-tab->height/2.f), tab->get_font(), br_font.get());
+			if(!get_enabled())
+				g->fill_rect(rect(start-border_width, get_position().y, tab->width+border_width, tab_height), br_disabled.get());
+			break;
+		}
+	case tab_orientation::bottom:
+		{
+			start += get_position().x;
+			if(tab == selected_tab)
+			{
+				g->draw_line(point(start-border_width/2.f, get_position().y+get_size().height), point(start-border_width/2.f, get_position().y - tab_height +get_size().height), pn_border.get()); // Left border
+				g->draw_line(point(start+tab->width-border_width/2.f, get_position().y + get_size().height), point(start+tab->width-border_width/2.f, get_position().y + get_size().height - tab_height), pn_border.get()); // Right border
+				g->draw_line(point(start-border_width/2.f, get_position().y + get_size().height-border_width/2.f), point(start+tab->width-border_width/2.f, get_position().y + get_size().height - border_width / 2.f), pn_border.get()); // Top border
+				g->fill_rect(rect(start, get_position().y+get_size().height-border_width/2.f-tab_height-10, tab->width-border_width, tab_height+10), br_back.get());
+				g->draw_line(point(get_position().x + get_size().width - border_width / 2.f, get_position().y + get_size().height-tab_height-border_width/2.f), point(get_position().x + get_size().width - border_width / 2.f, get_position().y+tab_height), pn_border.get());
+			}
+			else
+				g->fill_rect(rect(start-border_width, get_position().y + get_size().height-tab_height, tab->width+border_width, tab_height), hidx == idx ? br_hot.get() : br_tab.get());
+			g->draw_string(tab->get_title(), point(start + text_space, get_position().y+get_size().height-border_width/2.f-tab_height/2.f-tab->height/2.f), tab->get_font(), br_font.get());
+			if(!get_enabled())
+				g->fill_rect(rect(start-border_width, get_position().y + get_size().height-tab_height, tab->width+border_width, tab_height), br_disabled.get());
+			break;
+		}
+	case tab_orientation::left:
+		{
+			start += get_position().y;
+			if(tab == selected_tab)
+			{
+				g->draw_line(point(get_position().x, start-border_width/2.f), point(get_position().x + tab_height, start-border_width/2.f), pn_border.get()); // Top border
+				g->draw_line(point(get_position().x, start -border_width/2.f + tab->width), point(get_position().x + tab_height, start-border_width/2.f + tab->width), pn_border.get()); // Bottom border
+				g->draw_line(point(get_position().x+border_width/2.f, start-border_width/2.f), point(get_position().x+border_width/2.f, start-border_width/2.f+tab->width), pn_border.get()); // Left border
+				g->fill_rect(rect(get_position().x+border_width, start, tab_height+10, tab->width-border_width), br_back.get());
+				g->draw_line(point(get_position().x + tab_height, get_position().y + get_size().height-border_width/2.f), point(get_position().x + get_size().width - border_width / 2.f, get_position().y + get_size().height-border_width/2.f), pn_border.get());
+			}
+			else
+				g->fill_rect(rect(get_position().x, start-border_width, tab_height, tab->width+border_width), hidx == idx ? br_hot.get() : br_tab.get());
+			matrix rot;
+			point text_pos(get_position().x + tab_height/2.f+border_width/2.f, start + (tab->width)/2.f); // Rotationpoint, in the middle of the tab
+			point text_def(get_position().x + tab_height/2.f+border_width/2.f-tab->width/2.f+text_space, start + (tab->width)/2.f-tab->height/2.f); // Textpoint, text centered to the tab
+			matrix m = get_absolute_transform();
+			rot.rotate(270, text_pos); // Rotate matrix with rotationpoint
+			g->set_transform(rot*m); // Transformgraphics, rotate first, then source transform
+			g->draw_string(tab->get_title(), text_def, tab->get_font(), br_font.get());
+			g->set_transform(get_absolute_transform()); // Reset transform
+			if(!get_enabled())
+				g->fill_rect(rect(get_position().x, start-border_width, tab_height, tab->width+border_width), br_disabled.get());
+			break;
+		}
+	case tab_orientation::right:
+		{
+			start += get_position().y;
+			if(tab == selected_tab)
+			{
+				g->draw_line(point(get_position().x+get_size().width, start-border_width/2.f), point(get_position().x - tab_height + get_size().width, start-border_width/2.f), pn_border.get()); // Top border
+				g->draw_line(point(get_position().x+get_size().width, start -border_width/2.f + tab->width), point(get_position().x +get_size().width - tab_height, start-border_width/2.f + tab->width), pn_border.get()); // Bottom border
+				g->draw_line(point(get_position().x+get_size().width-border_width/2.f, start-border_width/2.f), point(get_position().x+get_size().width-border_width/2.f, start-border_width/2.f+tab->width), pn_border.get()); // Left border
+				g->fill_rect(rect(get_position().x-border_width+get_size().width-tab_height-10, start, tab_height+10, tab->width-border_width), br_back.get());
+				g->draw_line(point(get_position().x + tab_height, get_position().y + get_size().height-border_width/2.f), point(get_position().x + get_size().width - border_width / 2.f - tab_height, get_position().y + get_size().height-border_width/2.f), pn_border.get());
+			}
+			else
+				g->fill_rect(rect(get_position().x+get_size().width-tab_height, start-border_width, tab_height, tab->width+border_width), hidx == idx ? br_hot.get() : br_tab.get());
+			matrix rot;
+			point text_pos(get_position().x + get_size().width - tab_height/2.f-border_width/2.f, start + (tab->width)/2.f);
+			point text_def(get_position().x + get_size().width - tab_height/2.f-border_width/2.f-tab->width/2.f+text_space, start + (tab->width)/2.f-tab->height/2.f);
+			matrix m = get_absolute_transform();
+			rot.rotate(90, text_pos);
+			g->set_transform(rot*m);
+			g->draw_string(tab->get_title(), text_def, tab->get_font(), br_font.get());
+			g->set_transform(get_absolute_transform());
+			if(!get_enabled())
+				g->fill_rect(rect(get_position().x+get_size().width-tab_height, start-border_width, tab_height, tab->width+border_width), br_disabled.get());
+			break;
+		}
+	}
+	g->set_antialias(b);
+}
+
+void tab_panel::create_resources(graphics* g)
+{
+	if(app::is_high_contrast_app())
+	{
+		br_back = shared_ptr<solid_brush>(g->create_solid_brush(colour::button_face));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(colour::button_shadow));
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(colour::gray_text));
+		br_tab = shared_ptr<solid_brush>(g->create_solid_brush(colour::button_highlight));
+	}
+	else
+	{
+		br_back = shared_ptr<solid_brush>(g->create_solid_brush(cl_back));
+		br_hot = shared_ptr<solid_brush>(g->create_solid_brush(cl_hot));
+		br_font = shared_ptr<solid_brush>(g->create_solid_brush(cl_font));
+		br_tab = shared_ptr<solid_brush>(g->create_solid_brush(cl_tab));
+	}
+	br_border = shared_ptr<solid_brush>(g->create_solid_brush(cl_border));
+	pn_border = shared_ptr<pen>(g->create_pen(br_border.get(), border_width));
+	br_disabled = shared_ptr<solid_brush>(g->create_solid_brush(colour(50, colour::black)));
+	if(get_opacity() != 1.f)
+	{
+		float f = get_opacity();
+		br_back->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_font->set_opacity(f);
+		br_tab->set_opacity(f);
+		br_border->set_opacity(f);
+		pn_border->update();
+		br_disabled->set_opacity(f);
+	}
+}
+
+void tab_panel::set_opacity(float f)
+{
+	if(f == get_opacity())
+		return;
+	if(has_resources())
+	{
+		br_back->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_font->set_opacity(f);
+		br_tab->set_opacity(f);
+		br_border->set_opacity(f);
+		pn_border->update();
+		br_disabled->set_opacity(f);
+	}
+	dynamic_drawsurface::set_opacity(f);
+}
+
+void tab_panel::on_syscolour_changed()
+{
+	if(app::is_high_contrast_app())
+	{
+		br_back->set_colour(colour::button_face);
+		br_hot->set_colour(colour::button_shadow);
+		br_font->set_colour(colour::gray_text);
+		br_tab->set_colour(colour::button_face);
+	}
+	else
+	{
+		br_back->set_colour(cl_back);
+		br_hot->set_colour(cl_hot);
+		br_font->set_colour(cl_font);
+		br_tab->set_colour(cl_tab);
+	}
+}
+
+void tab_panel::this_mouse_move(const int mod, const point& p2)
+{
+	int old_idx = hidx;
+	point p(p2.x+get_position().x, p2.y+get_position().y);
+	hidx = -1;
+	float start = border_width;
+	for(unsigned i = 0; i < tabs.size(); ++i)
+	{
+		if(tab_contains(start, i, p))
+		{
+			hidx = i;
+			break;
+		}
+		start += border_width + tabs[i]->width;
+	}
+	if(hidx != old_idx)
+		redraw(get_bounds());
+}
+
+void tab_panel::this_mouse_leave(const point& p)
+{
+	if(change_if_diff(hidx, -1))
+		redraw(get_bounds());
+}
+
+void tab_panel::this_mouse_down(const mouse_buttons& mb, const int mod, const point& p)
+{
+	if(mb != mouse_buttons::left)
+		return;
+	if(hidx >= 0 && hidx < static_cast<int>(tabs.size()))
+	{
+		if(selected_tab != tabs[hidx])
+			select_tab(hidx);
+	}
+}
+
+void tab_panel::select_tab(int index)
+{
+	if(index < 0 || index > static_cast<int>(tabs.size()))
+		throw out_of_range("Index out of range");
+	if(tabs[index] == selected_tab)
+		return;
+	if(selected_tab != 0)
+		selected_tab->set_visible(false);
+	selected_tab = tabs[index];
+	selected_tab->set_visible(true);
+	selected_tab_changed(selected_tab);
+	redraw(get_bounds());
+}
+
+void tab_panel::add_tab(tab_page* tab)
+{
+	tab->set_parent(this);
+}
+
+void tab_panel::remove_tab(tab_page* tab)
+{
+	tab->set_parent(0);
+	tab->set_owner(0);
+}
+
+void tab_panel::add_surface(dynamic_drawsurface* surf)
+{
+	if(!surf) throw invalid_argument("Invalid surface");
+	tab_page* tab = dynamic_cast<tab_page*>(surf);
+	if(tab)
+	{
+		tab->set_visible(false);
+		tab->tab_owner = this;
+		tabs.push_back(tab);
+		if(selected_tab == 0)
+			select_tab(tabs.size()-1);
+	}
+	dynamic_drawsurface::add_surface(surf);
+}
+
+void tab_panel::remove_surface(dynamic_drawsurface* surf)
+{
+	if(!surf) throw invalid_argument("Invalid surface");
+	tab_page* tab = dynamic_cast<tab_page*>(surf);
+	if(tab)
+	{
+		tabs.erase(remove(tabs.begin(), tabs.end(), tab));
+		tab->tab_owner = 0;
+		if(tab == selected_tab)
+		{
+			if(!tabs.empty())
+				select_tab(0);
+			else
+				selected_tab = 0;
+		}
+	}
+	dynamic_drawsurface::remove_surface(surf);
+}
+
+rect tab_panel::get_tab_area()
+{
+	rect area;
+	switch(orient)
+	{
+	case tab_orientation::top:
+		{
+			area.position = point(get_position().x, tab_height+get_position().y);
+			area.sizef = size(get_size().width, get_size().height - tab_height);
+			break;
+		}
+	case tab_orientation::bottom:
+		{
+			area.position = get_position();
+			area.sizef = size(get_size().width, get_size().height - tab_height);
+			break;
+		}
+	case tab_orientation::left:
+		{
+			area.position = point(tab_height+get_position().x, get_position().y);
+			area.sizef = size(get_size().width - tab_height, get_size().height);
+			break;
+		}
+	case tab_orientation::right:
+		{
+			area.position = get_position();
+			area.sizef = size(get_size().width - tab_height, get_size().height);
+		}
+	}
+	return area;
+}
+
+float tab_panel::get_tab_width(int idx, graphics* g)
+{
+	tab_page* tb = tabs[idx];
+	rect bounds =  tb->get_font()->get_metrics(tb->get_title(), size::max_size(), g);
+	tb->height = bounds.get_height();
+	return bounds.get_width()+2*text_space;
+}
+
+int tab_panel::get_tab_count()
+{
+	float dist;
+	if(orient == tab_orientation::top || orient == tab_orientation::bottom)
+		dist = get_size().width-2*border_width;
+	else
+		dist = get_size().height-2*border_width;
+	float curr_width = 0.f;
+	int cnt = 0;
+	for(unsigned i = 0; i < tabs.size(); ++i, ++cnt)
+	{
+		curr_width += tabs[i]->width;
+		if(curr_width > dist)
+			break;
+	}
+	return cnt;
+}
+
+bool tab_panel::tab_contains(float start, int idx, const point& p)
+{
+	switch(orient)
+	{
+	case tab_orientation::bottom:
+		start += get_position().x;
+		return rect(start-border_width, get_position().y + get_size().height-tab_height, tabs[idx]->width+border_width, tab_height).contains(p, get_absolute_transform());
+	case tab_orientation::top:
+		start += get_position().x;
+		return rect(start-border_width, get_position().y, tabs[idx]->width+border_width, tab_height).contains(p, get_absolute_transform());
+	case tab_orientation::left:
+		start += get_position().y;
+		return rect(get_position().x, start-border_width, tab_height, tabs[idx]->width+border_width).contains(p, get_absolute_transform());
+	case tab_orientation::right:
+		start += get_position().y;
+		return rect(get_position().x+get_size().width-tab_height, start-border_width, tab_height, tabs[idx]->width+border_width).contains(p, get_absolute_transform());
+	default:
+		return false;
+	}
+}
+
+void tab_panel::set_back_colour(const colour& c)
+{
+	if(!change_if_diff(cl_back, c))
+		return;
+	if(has_resources())
+		br_back->set_colour(c);
+	back_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void tab_panel::set_hot_colour(const colour& c)
+{
+	if(!change_if_diff(cl_hot, c))
+		return;
+	if(has_resources())
+		br_hot->set_colour(c);
+	hot_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void tab_panel::set_font_colour(const colour& c)
+{
+	if(!change_if_diff(cl_font, c))
+		return;
+	if(has_resources())
+		br_font->set_colour(c);
+	font_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void tab_panel::set_tab_colour(const colour& c)
+{
+	if(!change_if_diff(cl_tab, c))
+		return;
+	if(has_resources())
+		br_tab->set_colour(c);
+	tab_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void tab_panel::set_border_colour(const colour& c)
+{
+	if(!change_if_diff(cl_border, c))
+		return;
+	border_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void tab_panel::set_border_focused_colour(const colour& c)
+{
+	if(!change_if_diff(cl_borderf, c))
+		return;
+	border_focused_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+// TabPanel
 
 };
 };
