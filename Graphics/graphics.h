@@ -765,12 +765,11 @@ public:
 	virtual void fill_ellipse(const ellipse& e, brush* b) = 0;
 	virtual void fill_rounded_rect(const rect& rc, float radiusx, float radiusy, brush* b) = 0;
 	virtual void fill_geometry(geometry* geo, brush* b) = 0;
-	virtual void fill_polygon(const point* ps, int count, brush* b) = 0; // Neu
+	virtual void fill_polygon(const point* ps, int count, brush* b) = 0; 
 
 	virtual void draw_ellipse(const ellipse& e, pen* p) = 0;
 	virtual void draw_line(const point& p1, const point& p2, pen* p) = 0;
 	virtual void draw_lines(const point* ps, int count, pen* p) = 0;
-	//virtual void draw_curve(const point* ps, int count, float tension, pen* p) = 0;
 	virtual void draw_rect(const rect rc, pen* p) = 0;
 	virtual void draw_rects(const rect* rcs, int count, pen* p) = 0;
 	virtual void draw_rounded_rect(const rect& rc, float radiusx, float radiusy, pen* p) = 0;
@@ -805,7 +804,7 @@ public:
 	virtual icon* create_icon(int id, HINSTANCE inst, const size& sz) = 0;
 	virtual font* create_font(const wstring& family_name, float size, int fstyle = font_style::regular) = 0;
 	virtual geometry* create_geometry() = 0;
-	virtual radial_gradient_brush* create_radial_gradient_brush(const ellipse& e, const gradient_stop& gradients, bool gamma = false) = 0;
+	//virtual radial_gradient_brush* create_radial_gradient_brush(const ellipse& e, const gradient_stop& gradients, bool gamma = false) = 0;
 	virtual font* get_system_font(float sz = 12.66f, int fstyle = font_style::regular) const = 0;
 	virtual graphics* create_graphics(HWND handle, callback<void(const size&, const resizing_types&)>& cb) = 0;
 	// Region does not get deleted
