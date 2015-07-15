@@ -2899,5 +2899,368 @@ void progress_bar::set_back_colour(colour c)
 	redraw(get_bounds());
 }
 // ProgressBar
+
+// TrackBar
+track_bar::track_bar()
+{
+	set_min_size(size(25, 25));
+	thumb_width = 8.f;
+	track_height = 3.f;
+	minimum = 0.f;
+	maximum = 100.f;
+	value = 0.f;
+	orient = track_orientation::horizontal;
+	cl_thumb = colour::gcl_menu_gray;
+	cl_hot = colour::gcl_gray;
+	cl_down = colour::gcl_hot_gray;
+	cl_done = colour::gcl_border;
+	cl_undone = colour::gcl_front_gray;
+	hot = down = false;
+	allow_precision = true;
+	set_captures_keyboard(true);
+	mouse_move += make_func_ptr(this, &track_bar::this_mouse_move);
+	mouse_leave += make_func_ptr(this, &track_bar::this_mouse_leave);
+	mouse_down += make_func_ptr(this, &track_bar::this_mouse_down);
+	mouse_up += make_func_ptr(this, &track_bar::this_mouse_up);
+	key_down += make_func_ptr(this, &track_bar::this_key_down);
+}
+
+track_bar::~track_bar()
+{
+	mouse_move -= make_func_ptr(this, &track_bar::this_mouse_move);
+	mouse_leave -= make_func_ptr(this, &track_bar::this_mouse_leave);
+	mouse_down -= make_func_ptr(this, &track_bar::this_mouse_down);
+	mouse_up -= make_func_ptr(this, &track_bar::this_mouse_up);
+	key_down -= make_func_ptr(this, &track_bar::this_key_down);
+}
+
+void track_bar::render(graphics* g)
+{
+	if(!has_resources())
+		init_resources(g);
+	draw_track(g);
+	draw_thumb(g);
+	dynamic_drawsurface::render(g);
+}
+
+void track_bar::draw_track(graphics* g)
+{
+	if(orient == track_orientation::horizontal)
+	{
+		if(value > 0)
+		{
+			g->fill_rect(rect(get_position().x, get_position().y+get_size().height/2.f-track_height/2.f, (get_size().width*(value-minimum)/(maximum-minimum)), track_height), br_done.get());
+			if(value != maximum)
+				g->fill_rect(rect(get_position().x + ((get_size().width-thumb_width)*(value-minimum)/(maximum-minimum)), get_position().y+get_size().height/2.f-track_height/2.f, get_size().width - ((get_size().width-thumb_width)*(value-minimum)/(maximum-minimum)) , track_height), br_undone.get());
+		}
+		else
+		{
+			g->fill_rect(rect(get_position().x, get_position().y+get_size().height/2.f-track_height/2.f, get_size().width, track_height), br_undone.get());
+		}
+	}
+	else
+	{
+		if(value > 0)
+		{
+			g->fill_rect(rect(get_position().x+get_size().width/2.f-track_height/2.f, get_position().y+get_size().height-get_size().height*(value-minimum)/(maximum-minimum), track_height, get_size().height*(value-minimum)/(maximum-minimum)), br_done.get());
+			if(value != maximum)
+				g->fill_rect(rect(get_position().x+get_size().width/2.f-track_height/2.f, get_position().y, track_height, get_size().height - ((get_size().height-thumb_width)*(value-minimum)/(maximum-minimum))), br_undone.get());
+		}
+		else
+		{
+			g->fill_rect(rect(get_position().x+get_size().width/2.f-track_height/2.f, get_position().y, track_height, get_size().height), br_undone.get());
+		}
+	}
+}
+
+void track_bar::set_opacity(float f)
+{
+	if(f == get_opacity())
+		return;
+	if(has_resources())
+	{
+		br_thumb->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_down->set_opacity(f);
+		br_done->set_opacity(f);
+		br_undone->set_opacity(f);
+		pn_done->update();
+	}
+	dynamic_drawsurface::set_opacity(f);
+}
+
+void track_bar::draw_thumb(graphics* g)
+{
+	solid_brush* br = br_thumb.get();
+	if(hot && !down)
+		br = br_hot.get();
+	else if(down)
+		br = br_down.get();
+
+	rect bounds = get_thumb();
+	g->fill_rect(bounds, br);
+	g->draw_rect(bounds, pn_done.get());
+}
+
+rect track_bar::get_thumb()
+{
+	if(orient == track_orientation::horizontal)
+		return	rect(get_position().x+((get_size().width-thumb_width)*(value-minimum)/(maximum-minimum)), get_position().y, thumb_width, get_size().height);
+	else 
+		return rect(get_position().x, get_position().y+get_size().height-thumb_width-((get_size().height-thumb_width)*(value-minimum)/(maximum-minimum)), get_size().width, thumb_width);
+}
+
+void track_bar::create_resources(graphics* g)
+{
+	br_thumb = shared_ptr<solid_brush>(g->create_solid_brush(cl_thumb));
+	br_hot = shared_ptr<solid_brush>(g->create_solid_brush(cl_hot));
+	br_down = shared_ptr<solid_brush>(g->create_solid_brush(cl_down));
+	br_done = shared_ptr<solid_brush>(g->create_solid_brush(cl_done));
+	br_undone = shared_ptr<solid_brush>(g->create_solid_brush(cl_undone));
+	float f = get_opacity();
+	if(f != 1.0)
+	{
+		br_thumb->set_opacity(f);
+		br_hot->set_opacity(f);
+		br_down->set_opacity(f);
+		br_done->set_opacity(f);
+		br_undone->set_opacity(f);
+	}
+	pn_done = shared_ptr<pen>(g->create_pen(br_undone.get()));
+}
+
+void track_bar::this_mouse_move(const int mod, const point& p3)
+{
+	bool rdr = hot;
+	float old_val = value;
+	point p(p3.x+get_position().x, p3.y+get_position().y);
+	if(get_thumb().contains(p, get_absolute_transform()))
+		hot = true;
+	else if(down)
+	{
+		point p2(p3);
+		matrix curr_trans = get_absolute_transform();
+		curr_trans.invert();
+		curr_trans.transform_points(&p2);
+		hot = true;
+		float diff = 0;
+		float range = 0;
+		if(orient == track_orientation::horizontal)
+		{
+			diff = p2.x-starting.x;
+			range = (get_size().width-thumb_width)/(maximum-minimum);
+		}
+		else
+		{
+			diff = -p2.y+starting.y;
+			range = (get_size().height-thumb_width)/(maximum-minimum);
+		}
+		float new_val = (diff/range)+minimum;
+		if((mod & mouse_modifiers::control) == mouse_modifiers::control && allow_precision)
+		{
+			new_val = value+(new_val-value)/100.f;
+			if((mod & mouse_modifiers::shift) == mouse_modifiers::shift)
+				new_val = value+(new_val-value)/10.f;
+		}
+		value = max(min(maximum, new_val), minimum);
+		if(old_val != value)
+			value_changed(value);
+	}
+	else
+		hot = false;
+	if(rdr != hot || value != old_val)
+		redraw(get_bounds());
+}
+
+void track_bar::this_mouse_down(const mouse_buttons& mb, const int, const point& p3)
+{
+	if(mb != mouse_buttons::left)
+		return;
+	point p2(p3);
+	point p(p2.x+get_position().x, p2.y+get_position().y);
+	matrix curr_trans = get_absolute_transform();
+	curr_trans.invert();
+	curr_trans.transform_points(&p2);
+	if(get_thumb().contains(p, get_absolute_transform()))
+	{
+		down = true;
+		starting = point(p2.x - ((get_size().width-thumb_width)*(value-minimum)/(maximum-minimum)), p2.y + ((get_size().height-thumb_width)*(value-minimum)/(maximum-minimum)));
+		redraw(get_bounds());
+	}
+}
+
+void track_bar::this_mouse_leave(const point& p_)
+{
+	bool b = hot || down;
+	point p = input::cursor::get_client_position(get_owner()->get_handle());
+	matrix curr_trans = get_absolute_transform();
+	curr_trans.invert();
+	curr_trans.transform_points(&p);
+	bool toggled = false;
+	float old_val = value;
+	bool precision = allow_precision && input::keyboard::get_key_state(virtual_keys::control, toggled);
+	if(orient == track_orientation::horizontal)
+	{
+		if(p.x <= get_position().x && down && !precision)
+		{
+			value = minimum;
+		}
+		else if(p.x >= get_position().x + get_size().width && down && !precision)
+		{
+			value = maximum;
+		}
+	}
+	else if(orient == track_orientation::vertical)
+	{
+		if(p.x <= get_position().y && down && !precision)
+		{
+			value = maximum;
+		}
+		else if(p.y >= get_position().y + get_size().height && down && !precision)
+		{
+			value = minimum;
+		}
+	}
+	hot = down = false;
+	if(value != old_val)
+		value_changed(value);
+	if(b || old_val != value)
+		redraw(get_bounds());
+}
+
+void track_bar::this_mouse_up(const mouse_buttons& mb, const int, const point& p)
+{	
+	if(change_if_diff(down, false))
+		redraw(get_bounds());
+}
+
+void track_bar::this_key_down(const virtual_keys& key, const key_extended_params& params)
+{
+	float old_val = value;
+	float denom = 1.f;
+	bool toggled = false;
+	if(input::keyboard::get_key_state(virtual_keys::control, toggled) && input::keyboard::get_key_state(virtual_keys::shift, toggled) && allow_precision)
+		denom = 1000.f;
+	else if(input::keyboard::get_key_state(virtual_keys::control, toggled) && allow_precision)
+		denom = 100.f;
+	if(key == virtual_keys::left || key == virtual_keys::down)
+	{
+		value -= params.repeat_count/denom;
+		value = min(maximum, max(minimum, value));
+	}
+	else if(key == virtual_keys::right || key == virtual_keys::up)
+	{
+		value += params.repeat_count/denom;
+		value = min(maximum, max(minimum, value));
+	}
+	else if(key == virtual_keys::end)
+		value = maximum;
+	else if(key == virtual_keys::home)
+		value = minimum;
+	if(value != old_val)
+	{
+		value_changed(value);
+		redraw(get_bounds());
+	}
+}
+
+void track_bar::set_value(float v)
+{
+	if(v == value)
+		return;
+	if(v < minimum || v > maximum)
+		throw out_of_range("Value must be between min and max");
+	value = v;
+	value_changed(v);
+	redraw(get_bounds());
+}
+
+void track_bar::set_maximum(float v)
+{
+	if(v == maximum)
+		return;
+	if(v <= minimum)
+		throw out_of_range("Maximum must be greater than minimum");
+	if(value > v)
+	{
+		value = v;
+		value_changed(v);
+	}
+	maximum = v;
+	maximum_changed(v),
+	redraw(get_bounds());
+}
+
+void track_bar::set_minimum(float v)
+{
+	if(v == minimum)
+		return;
+	if(v >= maximum)
+		throw out_of_range("Maximum must be greater than minimum");
+	if(value < v)
+	{
+		value = v;
+		value_changed(v);
+	}
+	minimum = v;
+	minimum_changed(v),
+	redraw(get_bounds());
+}
+
+void track_bar::set_thumb_colour(const colour& c)
+{
+	if(!change_if_diff(cl_thumb, c))
+		return;
+	if(br_thumb)
+		br_thumb->set_colour(c);
+	thumb_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void track_bar::set_hot_colour(const colour& c)
+{
+	if(!change_if_diff(cl_hot, c))
+		return;
+	if(br_hot)
+		br_hot->set_colour(c);
+	hot_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void track_bar::set_pressed_colour(const colour& c)
+{
+	if(!change_if_diff(cl_down, c))
+		return;
+	if(br_down)
+		br_down->set_colour(c);
+	pressed_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void track_bar::set_finished_colour(const colour& c)
+{
+	if(!change_if_diff(cl_done, c))
+		return;
+	if(br_done)
+		br_done->set_colour(c);
+	finished_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+
+void track_bar::set_unfinished_colour(const colour& c)
+{
+	if(!change_if_diff(cl_undone, c))
+		return;
+	if(br_undone)
+		br_undone->set_colour(c);
+	unfinished_colour_changed(c);
+	if(owner)
+		owner->redraw(get_bounds());
+}
+// TrackBar
 };
 };

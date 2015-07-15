@@ -598,13 +598,13 @@ public:
 	cursor_surface();
 	cursor_surface(HCURSOR cur_);
 	cursor_surface(const system_cursor& sys_cur);
+	cursor_surface(const cursor_surface&& cs) : cur(cs.get_cursor()) {}
 	cursor_surface(HINSTANCE inst, int id);
-	cursor_surface(const cursor_surface& surf);
 	cursor_surface(const wstring& filename);
 	~cursor_surface();
-	void operator=(const cursor_surface& surf);
 	HCURSOR get_cursor() const;
 private:
+	int count;
 	HCURSOR cur;
 };
 
@@ -1303,7 +1303,10 @@ public:
 	virtual void set_enable_dragdrop(bool b) {_dragdrop = b;}
 	virtual list<dynamic_drawsurface*>::const_iterator get_children_begin() {return surfaces.cbegin();}
 	virtual list<dynamic_drawsurface*>::const_iterator get_children_end() {return surfaces.cend();}
+	render_objects::cursor_surface get_cursor() const {return move(cur);}
+	virtual void set_cursor(const render_objects::cursor_surface& cur_s) = 0;
 protected:
+	render_objects::cursor_surface cur;
 	bool visible;
 	bool _dragdrop;
 	bool enabled;
@@ -1453,7 +1456,7 @@ public:
 	dynamic_drawsurface* get_focused_surface() {return focused_surf;}
 
 	virtual void redraw() {if(owner) owner->redraw();}
-	virtual void redraw(const rect& bounds) {if(owner) owner->redraw(bounds);}
+	virtual void redraw(const rect& bounds) {if(owner){ rect b(bounds); b.inflate(5.f, 5.f); owner->redraw(b);}}
 	virtual void layout();
 
 	// Override either update_shape(geometry*) or update_shape(const rect&)
@@ -1548,9 +1551,9 @@ protected:
 	virtual void on_drag_over(DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
 	virtual void on_drag_leave();
 	virtual void on_drop(IDataObject* data_object, DWORD keystate, const point& pt, dragdrop::drop_effects* effect);
+	virtual void on_cursor_changed(HCURSOR curr_current, const point& p);
 	void init_resources(gcl::render_objects::graphics* g);
 	virtual void create_resources(render_objects::graphics* g);
-	render_objects::cursor_surface cur;
 	dynamic_drawsurface* parent; // may be null
 	drawsurface* owner;
 	bool is_mover;

@@ -1626,6 +1626,59 @@ private:
 	progress_state state;
 };
 
+enum class track_orientation {horizontal, vertical};
+
+class track_bar :
+	public dynamic_drawsurface
+{
+public:
+	track_bar();
+	virtual ~track_bar();
+	virtual void render(graphics* g);
+	virtual bool is_rectangular() const {return true;}
+	virtual void create_resources(graphics* g);
+
+	callback<void(float)> value_changed, maximum_changed, minimum_changed;
+	callback<void(const colour&)> thumb_colour_changed, hot_colour_changed, pressed_colour_changed, finished_colour_changed, unfinished_colour_changed;
+
+	void set_value(float v);
+	float get_value() const {return value;}
+	void set_maximum(float v);
+	float get_maximum() const {return maximum;}
+	void set_minimum(float v);
+	float get_minimum() const {return minimum;}
+	virtual void set_opacity(float f);
+	colour get_thumb_colour() const {return cl_thumb;}
+	void set_thumb_colour(const colour& c);
+	colour get_hot_colour() const {return cl_hot;}
+	void set_hot_colour(const colour& c);
+	colour get_pressed_colour() const {return cl_down;}
+	void set_pressed_colour(const colour& c);
+	colour get_finished_colour() const {return cl_done;}
+	void set_finished_colour(const colour& c);
+	colour get_unfinished_colour() const {return cl_undone;}
+	void set_unfinished_colour(const colour& c);
+protected:
+	float thumb_width, track_height;
+	float minimum, maximum, value;
+	track_orientation orient;
+	void draw_track(graphics* g);
+	void draw_thumb(graphics* g);
+	rect get_thumb();
+	void this_mouse_move(const int, const point& p);
+	void this_mouse_down(const mouse_buttons& mb, const int, const point& p);
+	void this_mouse_up(const mouse_buttons& mb, const int, const point& p);
+	void this_mouse_leave(const point& p);
+	void this_key_down(const virtual_keys& key, const key_extended_params& params);
+private:
+	colour cl_thumb, cl_hot, cl_down, cl_done, cl_undone;
+	bool hot, down;
+	bool allow_precision;
+	point starting;
+	shared_ptr<solid_brush> br_thumb, br_hot, br_down, br_done, br_undone;
+	shared_ptr<pen> pn_done;
+};
+
 };
 };
 

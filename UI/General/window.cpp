@@ -5,9 +5,9 @@ namespace gcl { namespace ui {
 // Window
 bool window::queue_running = false;
 
-window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), ico(0), surf_cur(0), ico_sm(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location), drop_handler(this)
+window::window(void) : _cl_hlp(mouse_click, mouse_down, mouse_up, is_mouse_over), handle(0), ico(0), ico_sm(0), erase_colour(0x000000), _graphics(0), maximizebox(true), minimizebox(true), closebox(true), borderstyle(window_borderstyles::sizeable), state(window_states::normal), startposition(window_startpositions::default_location), drop_handler(this)
 {
-	cur = LoadCursor(NULL, IDC_ARROW);
+	cur = move(cursor_surface(system_cursor::arrow));
 	set_min_size(size(0,0));
 	has_resources = false;
 	set_max_size(size::max_size());
@@ -457,6 +457,7 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 						surf->on_mouse_enter(p);
 					if(surf->get_enabled())
 						surf->on_mouse_move(static_cast<int>(wParam), p);
+					surf->on_cursor_changed(cur_current, p);
 					risen = true;
 				}
 				else if(surf->is_mouse_over() && surf->is_available())
@@ -464,12 +465,20 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 				if(!is_mouse_over)
 				{
 					mouse_enter(p);
+					SendMessage(hWnd, WM_SETCURSOR, reinterpret_cast<WPARAM>(cur.get_cursor()), WM_GCL_CURSORCHANGED);
 					if(surf->is_mouse_down() && !(((wParam & mouse_modifiers::l_button) == mouse_modifiers::l_button) || ((wParam & mouse_modifiers::r_button) == mouse_modifiers::r_button) || ((wParam & mouse_modifiers::m_button) == mouse_modifiers::m_button)) )
 						surf->crt_up();
 					InvalidateRect(hWnd, 0, FALSE);
 				}
 			}
-			if(!risen) mouse_move(static_cast<int>(wParam), p);
+			if(!risen) 
+			{
+				if(cur_current != cur.get_cursor())
+				{
+					SendMessage(hWnd, WM_SETCURSOR, reinterpret_cast<WPARAM>(cur.get_cursor()), WM_GCL_CURSORCHANGED);
+				}
+				mouse_move(static_cast<int>(wParam), p);
+			}
 			if(!is_mouse_over)
 			{
 				TRACKMOUSEEVENT tre = {};
@@ -814,18 +823,18 @@ LRESULT window::message_received(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 			break;
 		}
 	case WM_SETCURSOR:
-		if(LOWORD(lParam) == HTCLIENT) 
+		if(lParam == WM_GCL_CURSORCHANGED) 
 		{
-			SetCursor(surf_cur.get_cursor() ? surf_cur.get_cursor() : cur.get_cursor());
+			SetCursor(cur_current);
+			cur_current = reinterpret_cast<HCURSOR>(wParam);
+			return TRUE;
+		}
+		else if(LOWORD(lParam) == HTCLIENT)
+		{
+			SetCursor(cur_current);
 			return TRUE;
 		}
 		return DefWindowProc(hWnd, msg, wParam, lParam);
-	case WM_GCL_CURSORCHANGED:
-		{
-			surf_cur = cursor_surface(reinterpret_cast<HCURSOR>(wParam));
-			SendMessage(hWnd, WM_SETCURSOR, 0, MAKELONG(HTCLIENT, 0));
-			break;
-		}
 	case WM_CLOSE:
 		drop_handler.deregister_dragdrop();
 		drop_handler.deregister_helper();
@@ -1086,11 +1095,6 @@ void window::set_cursor(const cursor_surface& cur_)
 		return;
 	cur = cur_;
 	SendMessage(handle, WM_SETCURSOR, reinterpret_cast<WPARAM>(handle), MAKELONG(HTCLIENT, 0));
-}
-
-cursor_surface window::get_cursor() const
-{
-	return cur;
 }
 
 bool window::flash(bool invert)

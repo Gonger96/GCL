@@ -86,7 +86,6 @@ public:
 	icon* get_small_icon() const {return ico_sm.get();}
 	void set_small_icon(icon* ico);
 	void set_cursor(const cursor_surface& cur);
-	cursor_surface get_cursor() const;
 	LRESULT send_message(UINT msg, LPARAM lParam, WPARAM wParam);
 	font* get_font() const {return m_font.get();}
 	// Window deletes the font
@@ -109,7 +108,7 @@ private:
 	bool has_resources;
 	shared_ptr<icon> ico, ico_sm;
 	shared_ptr<font> m_font;
-	cursor_surface cur, surf_cur;
+	HCURSOR cur_current;
 	static bool queue_running;
 	dragdrop::drop_target drop_handler;
 	IDataObject* last_data_object;

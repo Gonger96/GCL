@@ -948,14 +948,6 @@ cursor_surface::cursor_surface(HINSTANCE inst, int id)
 	if(!cur)
 		throw invalid_argument("Unable to load cursor");
 }
-
-cursor_surface::cursor_surface(const cursor_surface& surf)
-{
-	cur = CopyCursor(surf.cur);
-	if(!cur && surf.cur)
-		throw invalid_argument("Unable to load cursor");
-}
-
 cursor_surface::cursor_surface(const wstring& filename)
 {
 	cur = LoadCursorFromFile(filename.c_str());
@@ -967,13 +959,6 @@ cursor_surface::~cursor_surface()
 {
 	if(cur)
 		DestroyCursor(cur);
-}
-
-void cursor_surface::operator=(const cursor_surface& surf)
-{
-	cur = CopyCursor(surf.cur);
-	if(!cur && surf.cur)
-		throw invalid_argument("Unable to load cursor");
 }
 
 HCURSOR cursor_surface::get_cursor() const {return cur;}
@@ -1336,6 +1321,29 @@ void dynamic_drawsurface::on_drop(IDataObject* data_object, DWORD keystate, cons
 	}
 	if(!risen && get_enable_dragdrop())
 		drop(data_object, keystate, pt, effect);
+}
+
+void dynamic_drawsurface::on_cursor_changed(HCURSOR curr_current, const point& p)
+{
+	bool risen = false;
+	for(auto surf : surfaces)
+	{
+		if(surf->contains(p) && surf->get_visible())
+		{
+			risen = true;
+			surf->on_cursor_changed(curr_current, p);
+		}
+	}
+	if(!risen && owner && curr_current != cur.get_cursor() && cur.get_cursor())
+		SendMessage(owner->get_handle(), WM_SETCURSOR, reinterpret_cast<WPARAM>(cur.get_cursor()), WM_GCL_CURSORCHANGED);
+	else if(!risen && owner && !cur.get_cursor())
+	{
+		if(owner->get_cursor().get_cursor() != curr_current)
+		{
+			HCURSOR hcur = owner->get_cursor().get_cursor();
+			SendMessage(owner->get_handle(), WM_SETCURSOR, reinterpret_cast<WPARAM>(hcur), WM_GCL_CURSORCHANGED);
+		}
+	}
 }
 
 void dynamic_drawsurface::set_focus(bool b) 
@@ -1762,7 +1770,7 @@ void dynamic_drawsurface::on_mouse_enter(const point& p)
 	mouse_enter(p);
 	if(owner)
 	{
-		SendMessage(owner->get_handle(), WM_GCL_CURSORCHANGED, reinterpret_cast<WPARAM>(cur.get_cursor()), 0);
+		;//SendMessage(owner->get_handle(), WM_GCL_CURSORCHANGED, reinterpret_cast<WPARAM>(cur.get_cursor()), 0);
 		owner->redraw(get_bounds());
 	}
 }
@@ -1787,7 +1795,7 @@ void dynamic_drawsurface::on_mouse_leave(const point& p)
 	}
 	else if(owner)
 	{
-		SendMessage(owner->get_handle(), WM_GCL_CURSORCHANGED, 0, 0);
+		;//SendMessage(owner->get_handle(), WM_GCL_CURSORCHANGED, 0, 0);
 	}
 	if(owner)
 		owner->redraw(get_bounds());
