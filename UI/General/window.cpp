@@ -104,7 +104,7 @@ void window::layout()
 			float x = 0, y = 0;
 			float w = 0, h = 0;
 			margin m = surf->get_margin();
-			switch(surf->get_horinzontal_align())
+			switch(surf->get_horizontal_align())
 			{
 			case horizontal_align::left:
 				x = pddng.left;

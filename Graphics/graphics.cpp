@@ -1432,7 +1432,7 @@ void dynamic_drawsurface::layout()
 			float x = 0, y= 0;
 			float w = 0, h = 0;
 			margin m = surf->get_margin();
-			switch(surf->get_horinzontal_align())
+			switch(surf->get_horizontal_align())
 			{
 			case horizontal_align::left:
 				x = get_position().x;
@@ -1966,7 +1966,7 @@ void dynamic_drawsurface::set_menu(ui::context_menu* m)
 {
 	if(m == mmenu.get())
 		return;
-	mmenu = shared_ptr<ui::context_menu>(m);
+	mmenu.reset(m);
 	menu_changed(m);
 }
 

@@ -1476,7 +1476,7 @@ public:
 	void set_auto_position(bool b);
 	bool get_auto_size() const {return auto_size;}
 	void set_auto_size(bool b);
-	horizontal_align get_horinzontal_align() const {return hor_align;}
+	horizontal_align get_horizontal_align() const {return hor_align;}
 	void set_horizontal_align(const horizontal_align& h);
 	vertical_align get_vertical_align() const {return vert_align;}
 	void set_vertical_align(const vertical_align& h);

@@ -680,7 +680,7 @@ void stack_panel::layout()
 			float width = surf->get_size().width, height = surf->get_size().height;
 			if(orient == orientation::vertical)
 			{
-				switch(surf->get_horinzontal_align())
+				switch(surf->get_horizontal_align())
 				{
 				case horizontal_align::left:
 					x = pddng.left + m.left+get_position().x-get_hscroll_value();
@@ -754,7 +754,7 @@ void stack_panel::layout()
 			float width = surf->get_size().width, height = surf->get_size().height;
 			if(orient == orientation::vertical)
 			{
-				switch(surf->get_horinzontal_align())
+				switch(surf->get_horizontal_align())
 				{
 				case horizontal_align::left:
 					x = pddng.left + m.left+get_position().x-get_hscroll_value();
@@ -838,6 +838,467 @@ void stack_panel::set_orient(const orientation& ort)
 	layout();
 }
 // StackPanel
+
+// WrapPanel
+wrap_panel::wrap_panel()
+{
+	fl_dir = flow_direction::left_to_right;
+	orient = child_orientation::top;
+}
+
+void wrap_panel::set_flow_direction(const flow_direction& fd)
+{
+	if(!change_if_diff(fl_dir, fd))
+		return;
+	if(fd == flow_direction::bottom_to_top || fd == flow_direction::top_to_bottom)
+	{
+		if(orient == child_orientation::bottom || orient == child_orientation::top)
+			orient = child_orientation::left;
+	}
+	else
+	{
+		if(orient == child_orientation::left || orient == child_orientation::right)
+			orient = child_orientation::top;
+	}
+	layout();
+}
+
+void wrap_panel::set_child_orient(const child_orientation& co)
+{
+	if(co == orient)
+		return;
+	if(fl_dir == flow_direction::bottom_to_top || fl_dir == flow_direction::top_to_bottom)
+	{
+		if(co == child_orientation::bottom || co == child_orientation::top)
+			throw invalid_argument("Invalid orientation");
+	}
+	else
+	{
+		if(co == child_orientation::left || co == child_orientation::right)
+			throw invalid_argument("Invalid orientation");
+	}
+	orient = co;
+	layout();
+}
+
+void wrap_panel::layout()
+{
+	if(has_resources() && !is_rectangular())
+		update_shape(get_shape());
+	
+	switch(fl_dir)
+	{
+	case flow_direction::left_to_right:
+		layout_l_r(orient == child_orientation::bottom);
+		break;
+	case flow_direction::right_to_left:
+		layout_r_l(orient == child_orientation::bottom);
+		break;
+	case flow_direction::top_to_bottom:
+		layout_t_b(orient == child_orientation::right);
+		break;
+	case flow_direction::bottom_to_top:
+		layout_b_t(orient == child_orientation::right);
+	}
+
+	if(owner) owner->redraw(get_bounds());
+	layouted();
+}
+
+void wrap_panel::layout_t_b(bool right)
+{
+	float curr_width = right ? get_size().width-pddng.left-pddng.right : 0.f;
+	float curr_height = 0.f;
+	float max_width = 0.f;
+
+	int cnt = 0;
+	float r_width = get_row_width(surfaces.begin(), surfaces.end(), cnt);
+
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+	{
+		auto surf = *itr;
+		margin m = surf->get_margin();
+		float width = surf->get_min_size().width, height = surf->get_min_size().height;
+		float x = pddng.left, y = pddng.top;
+
+		if(curr_height+height+m.top+m.bottom > get_size().height-pddng.top-pddng.bottom && itr != surfaces.begin())
+		{
+			curr_height = height+m.top+m.bottom;
+			curr_width += right ? -max_width : max_width;
+			max_width = width+m.left+m.right;
+			if(right)
+				x += curr_width+get_position().x-(surf->get_size().width+m.left+m.right);
+			else
+				x += curr_width+get_position().x;
+			y += get_position().y;
+			r_width = get_row_width(itr, surfaces.end(), cnt);
+		}
+		else
+		{
+			if(right)
+				x += curr_width+get_position().x-(surf->get_size().width+m.left+m.right);
+			else
+				x += curr_width+get_position().x;
+			y += curr_height+get_position().y;
+			curr_height += height+m.top+m.bottom;
+			max_width = max(max_width, width+m.left+m.right);
+		}
+
+		if(width+m.left+m.right != r_width && cnt > 1)
+			position_surf(surf->get_margin(), surf->get_vertical_align(), surf->get_horizontal_align(), right, r_width, x, y, width, height);
+
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x+m.left, y+m.top), false);}
+		surf->layout();
+	}
+}
+
+void wrap_panel::layout_b_t(bool right)
+{
+	float curr_width = right ? get_size().width-pddng.left-pddng.right : 0.f;
+	float curr_height = get_size().height-pddng.top-pddng.bottom;
+	float max_width = 0.f;
+
+	int cnt = 0;
+	float r_width = get_row_width(surfaces.begin(), surfaces.end(), cnt);
+
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+	{
+		auto surf = *itr;
+		margin m = surf->get_margin();
+		float width = surf->get_min_size().width, height = surf->get_min_size().height;
+		float x = pddng.left, y = pddng.top;
+
+		if(curr_height-height-m.top-m.bottom < 0 && itr != surfaces.begin())
+		{
+			curr_height = get_size().height-pddng.top-pddng.bottom-height-m.top-m.bottom;
+			curr_width += right ? -max_width : max_width;
+			max_width = width+m.left+m.right;
+			if(right)
+				x += curr_width+get_position().x-(surf->get_size().width+m.left+m.right);
+			else
+				x += curr_width+get_position().x;
+			y += get_position().y+get_size().height-pddng.top-pddng.bottom-height-m.top-m.bottom;
+			r_width = get_row_width(itr, surfaces.end(), cnt);
+		}
+		else
+		{
+			if(right)
+				x += curr_width+get_position().x-(surf->get_size().width+m.left+m.right);
+			else
+				x += curr_width+get_position().x;
+			y = y+curr_height+get_position().y-m.top-m.bottom-height;
+			curr_height -= height+m.top+m.bottom;
+			max_width = max(max_width, width+m.left+m.right);
+		}
+
+		if(width+m.left+m.right != r_width && cnt > 1)
+			position_surf(surf->get_margin(), surf->get_vertical_align(), surf->get_horizontal_align(), right, r_width, x, y, width, height);
+
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x+m.left, y+m.top), false);}
+		surf->layout();
+	}
+}
+
+void wrap_panel::layout_l_r(bool bottom)
+{
+	float curr_width = 0.f;
+	float curr_height = bottom ? get_size().height-pddng.top-pddng.bottom : 0.f;
+	float max_height = 0.f;
+
+	int cnt = 0;
+	float r_height = get_row_height(surfaces.begin(), surfaces.end(), cnt);
+
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+	{
+		auto surf = *itr;
+		margin m = surf->get_margin();
+		float width = surf->get_min_size().width, height = surf->get_min_size().height;
+		float x = pddng.left, y = pddng.top;
+
+		if(curr_width+width+m.left+m.right > get_size().width-pddng.left-pddng.right && itr != surfaces.begin())
+		{
+			curr_width = width+m.left+m.right;
+			curr_height += bottom ? -max_height : max_height;
+			max_height = height+m.top+m.bottom;
+			x += get_position().x;
+			if(bottom)
+				y += curr_height+get_position().y-(surf->get_size().height+m.top+m.bottom);
+			else
+				y += curr_height+get_position().y;
+			r_height = get_row_height(itr, surfaces.end(), cnt);
+		}
+		else
+		{
+			x += curr_width+get_position().x;
+			if(bottom)
+				y += curr_height+get_position().y-(surf->get_size().height+m.top+m.bottom);
+			else
+				y += curr_height+get_position().y;
+			curr_width += width+m.left+m.right;
+			max_height = max(max_height, height+m.top+m.bottom);
+		}
+
+		if(height+m.top+m.bottom != r_height && cnt > 1)
+			position_surf(surf->get_margin(), surf->get_vertical_align(), surf->get_horizontal_align(), bottom, r_height, x, y, width, height);
+
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x+m.left, y+m.top), false);}
+		surf->layout();
+	}
+}
+
+void wrap_panel::layout_r_l(bool bottom)
+{
+	float curr_width = get_size().width-pddng.left-pddng.right;
+	float curr_height = bottom ? get_size().height-pddng.top-pddng.bottom : 0.f;
+	float max_height = 0.f;
+
+	int cnt = 0;
+	float r_height = get_row_height(surfaces.begin(), surfaces.end(), cnt);
+
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); ++itr)
+	{
+		auto surf = *itr;
+		margin m = surf->get_margin();
+		float width = surf->get_min_size().width, height = surf->get_min_size().height;
+		float x = pddng.left, y = pddng.top;
+
+		if(curr_width-width-m.left-m.right < 0 && itr != surfaces.begin())
+		{
+			curr_width = get_size().width-pddng.left-pddng.right-width-m.left-m.right;
+			curr_height += bottom ? -max_height : max_height;
+			max_height = height+m.top+m.bottom;
+			x = get_position().x+pddng.left+get_size().width-pddng.left-pddng.right-width-m.left-m.right;
+			if(bottom)
+				y += curr_height+get_position().y-(surf->get_size().height+m.top+m.bottom);
+			else
+				y += curr_height+get_position().y;
+			r_height = get_row_height(itr, surfaces.end(), cnt);
+		}
+		else
+		{
+			x = x+curr_width+get_position().x-m.left-m.right-width;
+			if(bottom)
+				y += curr_height+get_position().y-(surf->get_size().height+m.top+m.bottom);
+			else
+				y += curr_height+get_position().y;
+			curr_width -= width+m.left+m.right;
+			max_height = max(max_height, height+m.top+m.bottom);
+		}
+
+		if(height+m.top+m.bottom != r_height && cnt > 1)
+			position_surf(surf->get_margin(), surf->get_vertical_align(), surf->get_horizontal_align(), bottom, r_height, x, y, width, height);
+
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x+m.left, y+m.top), false);}
+		surf->layout();
+	}
+}
+
+void wrap_panel::position_surf(const margin& m, const vertical_align& valign, const horizontal_align& halign, bool sec, float r_height, float& x, float& y, float& width, float& height)
+{
+	if(fl_dir == flow_direction::left_to_right || fl_dir == flow_direction::right_to_left)
+	{
+		switch(valign)
+		{
+		case vertical_align::top:
+			if(sec)
+				y = min(y, y-r_height+height);
+			break;
+		case vertical_align::bottom:
+			if(!sec)
+				y = max(y, y + r_height - height);
+			break;
+		case vertical_align::center:
+			y = sec ? min(y, y - r_height/2.f + height/2.f) : max(y, y + r_height/2.f - height/2.f);
+			break;
+		case vertical_align::stretch:
+			height = r_height-m.top-m.bottom;
+		}
+	}
+	else
+	{
+		switch(halign)
+		{
+		case horizontal_align::left:
+			if(sec)
+				x = min(x, x-r_height+width);
+			break;
+		case horizontal_align::center:
+			x = sec ? min(x, x - r_height/2.f + width/2.f) : max(x, x+r_height/2.f-width/2.f);
+			break;
+		case horizontal_align::right:
+			if(!sec)
+				x = max(x, x + r_height - width);
+			break;
+		case horizontal_align::stretch:
+			width = r_height-m.right-m.left;
+			break;
+		}
+	}
+}
+
+float wrap_panel::get_row_height(lst_itr bgn, lst_itr end, int& cnt)
+{
+	float max_height = 0.f;
+	float width = 0.f;
+	cnt = 0;
+	while(bgn != end)
+	{
+		auto surf = *bgn;
+		width += surf->get_min_size().width+surf->get_margin().left+surf->get_margin().right;
+		if(width > get_size().width-pddng.left-pddng.right)
+			break;
+		max_height = max(max_height, surf->get_min_size().height+surf->get_margin().top+surf->get_margin().bottom);
+		bgn++;
+		cnt++;
+	}
+	return max_height;
+}
+
+float wrap_panel::get_row_width(lst_itr bgn, lst_itr end, int& cnt)
+{
+	float max_width = 0.f;
+	float height = 0.f;
+	cnt = 0;
+	while(bgn != end)
+	{
+		auto surf = *bgn;
+		height += surf->get_min_size().height+surf->get_margin().top+surf->get_margin().bottom;
+		if(height > get_size().height-pddng.top-pddng.bottom)
+			break;
+		max_width = max(max_width, surf->get_min_size().width+surf->get_margin().left+surf->get_margin().right);
+		cnt++;
+		bgn++;
+	}
+	return max_width;
+}
+// WrapPanel
+
+// DockPanel
+void dock_panel::set_auto_min_size(bool b)
+{
+	if(b == auto_min)
+		return;
+	auto_min = b;
+	if(!b)
+		minsize = size(5, 5);
+	get_absolute_owner()->layout();
+}
+
+void dock_panel::layout()
+{
+	if(has_resources() && !is_rectangular())
+		update_shape(get_shape());
+	rect bounds = rect(get_position(), get_size());
+	bounds.sizef.width -= pddng.right+pddng.left;
+	bounds.sizef.height -= pddng.bottom+pddng.top;
+	bounds.position.x += pddng.left;
+	bounds.position.y += pddng.top;
+	float mwidth = 0.f, mheight = 0.f;
+	for(auto itr = surfaces.begin(); itr != surfaces.end(); itr++)
+	{
+		auto surf = *itr;
+		float width = surf->get_min_size().width, height = surf->get_min_size().height;
+		float x = 0.f, y = 0.f;
+		margin m = surf->get_margin();
+		mwidth += width;
+		mheight += height;
+
+		switch(get_dock_style(surf))
+		{
+		case dock_style::bottom:
+			{
+				x = bounds.get_x();
+				y = bounds.get_y()+bounds.get_height()-height-m.bottom-m.top;
+				width = max(width, bounds.get_width()-m.right-m.left);
+				bounds.sizef.height -= height+m.top+m.bottom;
+				break;
+			}
+		case dock_style::top:
+			{
+				x = bounds.get_x();
+				y = bounds.get_y();
+				width = max(width, bounds.get_width()-m.right-m.left);
+				bounds.sizef.height -= height+m.top+m.bottom;
+				bounds.position.y += height+m.top+m.bottom;
+				break;
+			}
+		case dock_style::left:
+			{
+				x = bounds.get_x();
+				y = bounds.get_y();
+				height = max(height, bounds.get_height()-m.top-m.bottom);
+				bounds.sizef.width -= width+m.left+m.right;
+				bounds.position.x += width+m.left+m.right;
+				break;
+			}
+		case dock_style::right:
+			{
+				x = bounds.get_x()+bounds.get_width()-width-m.right-m.left;
+				y = bounds.get_y();
+				height = max(height, bounds.get_height()-m.top-m.bottom);
+				bounds.sizef.width -= width+m.left+m.right;
+				break;
+			}
+		case dock_style::fill:
+			{
+				x = bounds.get_x();
+				y = bounds.get_y();
+				width = max(width, bounds.get_width()-m.right-m.left);
+				height = max(height, bounds.get_height()-m.top-m.bottom);
+				bounds.position.x += width+m.left;
+				bounds.position.y += height+m.top;
+				bounds.sizef.width -= width+m.left+m.right;
+				bounds.sizef.height -= height+m.top+m.bottom;
+				break;
+			}
+		}
+
+		if(surf->get_auto_size()) {surf->set_size(size(width, height), false);}
+		if(surf->get_auto_position()) {surf->set_position(point(x+m.left, y+m.top), false);}
+		surf->layout();
+	}
+	if(owner) owner->redraw(get_bounds());
+	layouted();
+	if(auto_min)
+	{
+		minsize.width = max(mwidth, 5.f);
+		minsize.height = max(mheight, 5.f);	
+	}
+	// Works fine, tested 18.7.15 (Margin & Padding inluded)
+}
+
+dock_panel::dock_style dock_panel::get_dock_style(dynamic_drawsurface* dd)
+{
+	dock_style ds = dock_style::left;
+	switch(dd->get_horizontal_align())
+	{
+	case horizontal_align::left:
+		ds = dock_style::left;
+		break;
+	case horizontal_align::right:
+		ds = dock_style::right;
+		break;
+	case horizontal_align::stretch:
+		ds = dock_style::fill;
+	}
+	switch(dd->get_vertical_align())
+	{
+	case vertical_align::bottom:
+		ds = dock_style::bottom;
+		break;
+	case vertical_align::stretch:
+		ds = dock_style::fill;
+		break;
+	case vertical_align::top:
+		ds = dock_style::top;
+	}
+	return ds;
+}
+// DockPanel
 
 // Grouppanel
 group_panel::group_panel()
@@ -1016,7 +1477,7 @@ void tab_panel::layout()
 				float x = 0, y= 0;
 				float w = 0, h = 0;
 				margin m = surf->get_margin();
-				switch(surf->get_horinzontal_align())
+				switch(surf->get_horizontal_align())
 				{
 				case horizontal_align::left:
 					x = get_position().x;

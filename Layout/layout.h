@@ -75,7 +75,7 @@ protected:
 	void on_mouse_up(const mouse_buttons& b, const int m, const point& p);
 	void on_mouse_enter(const point& p);
 	void on_mouse_leave(const point& p);
-protected: // ÄNDERN !!!!!'''''''''''''''''''''''''''''''####################################
+private:
 	float hfix, vfix;
 	float vwidth, hheight;
 	const float arrow_size;
@@ -133,6 +133,48 @@ public:
 private:
 	orientation orient;
 	child_orientation child_orient;
+};
+
+enum class flow_direction {left_to_right, right_to_left, top_to_bottom, bottom_to_top};
+
+// Same as wrap_panel, but wrapps the Elements
+class wrap_panel :
+	public dynamic_drawsurface
+{
+typedef list<dynamic_drawsurface*>::iterator lst_itr;
+public:
+	wrap_panel();
+	virtual void layout();
+	flow_direction get_flow_direction() const {return fl_dir;}
+	void set_flow_direction(const flow_direction& fd);
+	child_orientation get_child_orient() const {return orient;}
+	void set_child_orient(const child_orientation& co);
+protected:
+	float get_row_height(lst_itr bgn, lst_itr end, int& cnt);
+	float get_row_width(lst_itr bgn, lst_itr end, int& cnt);
+	void layout_l_r(bool bottom);
+	void layout_r_l(bool bottom);
+	void layout_t_b(bool right);
+	void layout_b_t(bool right);
+	void position_surf(const margin& m, const vertical_align& valign, const horizontal_align& halign, bool sec, float r_height, float& x, float& y, float& width, float& height); 
+private:
+	flow_direction fl_dir;
+	child_orientation orient;
+};
+
+class dock_panel :
+	public dynamic_drawsurface
+{
+private:
+	enum class dock_style {top, left, right, bottom, fill};
+public:
+	dock_panel() : auto_min(true) {}
+	virtual void layout();
+	bool get_auto_min_size() const {return auto_min;}
+	void set_auto_min_size(bool b);
+protected:
+	bool auto_min;
+	dock_style get_dock_style(dynamic_drawsurface* dd);
 };
 
 class group_panel :
