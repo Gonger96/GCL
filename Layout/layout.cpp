@@ -1967,6 +1967,14 @@ void tab_panel::set_border_focused_colour(const colour& c)
 	if(owner)
 		owner->redraw(get_bounds());
 }
+
+void tab_panel::set_tab_orientation(const tab_orientation& tab_orient)
+{
+	if(tab_orient == orient)
+		return;
+	orient = tab_orient;
+	get_absolute_owner()->layout();
+}
 // TabPanel
 
 };

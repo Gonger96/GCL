@@ -1638,7 +1638,6 @@ protected:
 	virtual void on_syscolour_changed();
 	void this_mouse_move(const int mod, const point& p);
 	void this_mouse_leave(const point&);
-	void this_mouse_down(const mouse_buttons& mb, int modd, const point& p) {}//opened = false;}
 	void this_mouse_up(const mouse_buttons& mb, int modd, const point& p);
 	vector<menu_strip_m*> strips;
 	colour cl_back, cl_down, cl_hot, cl_font, cl_gray;

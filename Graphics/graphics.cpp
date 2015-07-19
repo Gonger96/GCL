@@ -3037,7 +3037,6 @@ menu::menu()
 	mouse_move += make_func_ptr(this, &menu::this_mouse_move);
 	mouse_leave += make_func_ptr(this, &menu::this_mouse_leave);
 	mouse_up += make_func_ptr(this, &menu::this_mouse_up);
-	mouse_down += make_func_ptr(this, &menu::this_mouse_down);
 }
 
 menu::~menu()
@@ -3045,7 +3044,6 @@ menu::~menu()
 	mouse_move -= make_func_ptr(this, &menu::this_mouse_move);
 	mouse_leave -= make_func_ptr(this, &menu::this_mouse_leave);
 	mouse_up += make_func_ptr(this, &menu::this_mouse_up);
-	mouse_down += make_func_ptr(this, &menu::this_mouse_down);
 }
 
 void menu::render(graphics* g)
@@ -3175,10 +3173,16 @@ void menu::this_mouse_up(const mouse_buttons& mb, int modd, const point& p)
 	auto strip = strips[hidex];
 	if(!strip->get_enabled())
 		return;
-	POINT pp = {static_cast<int>(strip->get_intersect_bounds(get_position().y, get_size().height, space).get_x()), static_cast<int>(get_position().y + get_size().height)};
-	MapWindowPoints(get_owner()->get_handle(), GetDesktopWindow(), &pp, 1);
+	RECT rc;
+	GetClientRect(owner->get_handle(), &rc);
+	POINT ps = { rc.left, rc.top };
+	MapWindowPoints(owner->get_handle(), GetDesktopWindow(), &ps, 1);
+	point pos(strip->get_intersect_bounds(get_position().y, get_size().height, space).get_x(), get_position().y + get_size().height);
+	get_absolute_transform().transform_points(&pos);
+	pos.x += ps.x;
+	pos.y += ps.y;
 	if(strip->get_menu())
-		strip->get_menu()->show(point(static_cast<float>(pp.x), static_cast<float>(pp.y)));
+		strip->get_menu()->show(pos);
 }
 
 int menu::get_opened()

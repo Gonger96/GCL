@@ -246,6 +246,8 @@ public:
 	void set_border_colour(const colour& c);
 	colour get_border_focused_colour() const {return cl_borderf;}
 	void set_border_focused_colour(const colour& c);
+	tab_orientation get_tab_orientation() const {return orient;}
+	void set_tab_orientation(const tab_orientation& tab_orient);
 protected:
 	vector<tab_page*> tabs;
 	rect get_tab_area();

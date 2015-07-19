@@ -1322,8 +1322,6 @@ public:
 		menu->closed += make_func_ptr(this, &combo_box::menu_closed);
 		for(auto& itr : strips)
 			menu->add_strip(&itr);
-		menu->set_back_colour(back_colour);
-		menu->set_hot_colour(cl_hot);
 	}
 
 	callback<void(int)> selected_index_changed;
@@ -1370,8 +1368,7 @@ public:
 		for(auto& itm : coll)
 		{
 			itm.name = translator(itm.mem);
-			if(has_resources())
-				strips[i].set_title(itm.name);
+			strips[i].set_title(itm.name);
 			++i;
 		}
 		if(owner)
@@ -1526,7 +1523,11 @@ protected:
 			GetClientRect(owner->get_handle(), &rc);
 			POINT ps = {rc.left, rc.top};
 			MapWindowPoints(owner->get_handle(), GetDesktopWindow(), &ps, 1);
-			menu->show(point(get_position().x+ps.x, get_position().y + ps.y + get_size().height), static_cast<int>(get_size().width));
+			point pos(get_position().x, get_position().y + get_size().height);
+			get_absolute_transform().transform_points(&pos);
+			pos.x += ps.x;
+			pos.y += ps.y;
+			menu->show(pos, static_cast<int>(get_size().width));
 		}
 		else
 		{
